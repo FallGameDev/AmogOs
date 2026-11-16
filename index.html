@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>AmogOs</title>
-<meta name="amogos-version" content="1.0.6">
+<meta name="amogos-version" content="1.1.2">
 <script>
 /* ===== Patch loader =====
    The version of this file is the meta tag above (the ONLY place to change it for a release).
@@ -254,7 +254,7 @@ const $=(s,e=document)=>e.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const enc=new TextEncoder(),dec=new TextDecoder();
 /* ----- Settings store: per-user, with defaults ----- */
-const OS_VERSION=(document.querySelector('meta[name=amogos-version]')||{}).content||'1.0.6',OS_REPO='FallGameDev/OS.Lite'; // the version is the <meta name=amogos-version> tag at the top of this file
+const OS_VERSION=(document.querySelector('meta[name=amogos-version]')||{}).content||'1.1.2',OS_REPO='FallGameDev/OS.Lite'; // the version is the <meta name=amogos-version> tag at the top of this file
 const STORE_RAW='https://raw.githubusercontent.com/FallGameDev/OS.Lite/main/apps/'; // app packages live in the apps folder of OS.Lite
 const DEF={device:'AMOG-PC',h24:false,secs:false,dfmt:'short',confirmDel:false,maxWin:false,brightness:100,scale:100,night:false,nightAmt:30,sounds:true,volume:60,dock:'bottom',dockSize:'m',align:'center',autohide:false,clock:true,showStart:true,textSize:14,hc:false,rm:false,bigcur:false,filter:'none',notif:true,dur:3,accent:'#4cc2ff',engine:'google',edgeUrl:'https://mcqpodbwtwhjhkycwhzf.supabase.co/functions/v1/fetch-page',edgeKey:'',proxy:'',storeSrc:'',startApps:true,autoUpdate:true};
 const S=()=>Object.assign({},DEF,me&&U()?U().set:{});
