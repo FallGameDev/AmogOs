@@ -2,1226 +2,195 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="amogos-launcher" content="1">
 <title>AmogOs</title>
-<meta name="amogos-version" content="1.1.2">
-<script>
-/* ===== Patch loader =====
-   The version of this file is the meta tag above (the ONLY place to change it for a release).
-   If the user installed a software update (Settings > Update), the release url, version and a saved
-   copy of that release live in localStorage. When this file is older than that release, the saved
-   release is started in a full-screen frame, with a card showing progress and time left.
-   Safety nets so there is never a silent black screen:
-     1. If the new version has not started after MAX seconds, the update is dropped and this built-in version starts.
-     2. If the OS itself does not start, an error screen shows what went wrong, with buttons to recover. */
-(function(){
- var m=document.querySelector('meta[name=amogos-version]'),VER=m?m.content:'0';
- var L;try{L=localStorage}catch(e){L={getItem:function(){return null},setItem:function(){},removeItem:function(){}}}
- var EST=8,MAX=15; // EST = guessed start time in seconds, MAX = give up after this many
- function parts(v){return String(v).replace(/^v/i,'').split('.').map(function(n){return parseInt(n,10)||0})}
- function isNewer(a,b){var x=parts(a),y=parts(b),n=Math.max(x.length,y.length);for(var i=0;i<n;i++){var d=(x[i]||0)-(y[i]||0);if(d)return d>0}return false}
- // The saved copy of an update can be huge, so it is kept in the browser cache (or IndexedDB), NOT localStorage (5 MB limit).
- // localStorage only keeps small notes: url, version, boot state and where the copy is.
- var CK='amogos-update',CU='https://amogos.invalid/patch';
- function idb(){return new Promise(function(ok,no){var r=indexedDB.open('amogos-update',1);r.onupgradeneeded=function(){r.result.createObjectStore('p')};r.onsuccess=function(){ok(r.result)};r.onerror=function(){no(r.error)}})}
- function readPatch(){
-  return Promise.resolve().then(function(){
-   var kind=L.getItem('amogos.patchStore');
-   if(kind==='cache')return caches.open(CK).then(function(c){return c.match(CU)}).then(function(r){return r?r.text():null});
-   if(kind==='idb')return idb().then(function(db){return new Promise(function(ok,no){var q=db.transaction('p').objectStore('p').get('code');q.onsuccess=function(){var v=q.result||null;db.close();ok(v)};q.onerror=function(){db.close();no(q.error)}})});
-   return L.getItem('amogos.patchCode'); // copies saved by older versions
-  });
- }
- function dropPatch(){try{caches.delete(CK)}catch(e){}try{indexedDB.deleteDatabase('amogos-update')}catch(e){}}
- function wipe(){['amogos.releaseUrl','amogos.releaseTag','amogos.patchCode','amogos.patchStore','amogos.boot'].forEach(function(k){L.removeItem(k)});dropPatch()}
- function secs(n){return n<=1?'less than a second':'about '+Math.ceil(n)+' seconds'}
- var CSS='position:fixed;left:0;top:0;width:100%;height:100%;z-index:2147483647;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:#0a1330;color:#fff;font:16px "Segoe UI",system-ui,sans-serif;text-align:center;padding:20px;box-sizing:border-box';
-
- // ---- Error screen: shown when the OS never gets past the loading screen ----
- var errs=[];
- window.addEventListener('error',function(e){errs.push((e.message||'Error')+(e.lineno?'  (line '+e.lineno+')':''))});
- window.addEventListener('unhandledrejection',function(e){errs.push('Promise error: '+(e.reason&&e.reason.message||e.reason))});
- setTimeout(function(){
-  if(window.__amoSwapped)return;                       // the update card handles that case
-  var sp=document.getElementById('splash');
-  if(!sp||getComputedStyle(sp).display==='none')return; // the OS started fine
-  var d=document.createElement('div');d.style.cssText=CSS;
-  d.innerHTML='<b style="font-size:24px">AmogOs did not start</b><div style="max-width:560px;opacity:.85">Something went wrong while loading. You can try again, or remove the installed update and use the built-in version.</div>'
-   +'<pre id="amoE" style="max-width:640px;max-height:30vh;overflow:auto;text-align:left;background:rgba(0,0,0,.35);padding:10px;border-radius:8px;font-size:13px;white-space:pre-wrap"></pre>'
-   +'<div style="display:flex;gap:10px"><button id="amoR" style="padding:8px 16px;border-radius:8px;border:0;background:#4cc2ff;font-weight:600;cursor:pointer">Try again</button><button id="amoW" style="padding:8px 16px;border-radius:8px;border:0;cursor:pointer">Remove update and restart</button></div>';
-  d.querySelector('#amoE').textContent=errs.length?errs.slice(0,6).join('\n'):'No error was reported (version '+VER+').';
-  d.querySelector('#amoR').onclick=function(){location.reload()};
-  d.querySelector('#amoW').onclick=function(){wipe();location.reload()};
-  (document.body||document.documentElement).appendChild(d);
- },8000);
-
- // ---- Replace this page with the saved release (runs after the page is parsed, so nothing here fights the parser) ----
- function host(code,tag){
-  try{
-   var de=document.documentElement;while(de.firstChild)de.removeChild(de.firstChild);
-   var head=document.createElement('head');
-   head.innerHTML='<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AmogOs</title>';
-   var st=document.createElement('style');
-   st.textContent='html,body{margin:0;height:100%;background:#0a1330;overflow:hidden}#amoH{position:fixed;left:0;top:0;width:100%;height:100%;border:0}'
-    +'#amoU{'+CSS+';z-index:2;transition:opacity .5s}#amoU b{font-size:24px;font-weight:600}#amoU i{display:block;width:260px;height:8px;border-radius:4px;background:rgba(255,255,255,.15);overflow:hidden}'
-    +'#amoU i span{display:block;height:100%;width:0;background:#4cc2ff;transition:width .3s}#amoU small{opacity:.7}';
-   head.appendChild(st);
-   var body=document.createElement('body');
-   var fr=document.createElement('iframe');fr.id='amoH';
-   fr.setAttribute('allow','autoplay; fullscreen; gamepad; clipboard-write; pointer-lock; microphone; camera');
-   var ov=document.createElement('div');ov.id='amoU';
-   ov.innerHTML='<b>Updating AmogOs</b><div id="amoT"></div><i><span id="amoB"></span></i><small id="amoS"></small>';
-   body.appendChild(fr);body.appendChild(ov);de.appendChild(head);de.appendChild(body);
-   fr.srcdoc=code; // the new version runs in here (same storage as this page)
-   var T=ov.querySelector('#amoT'),B=ov.querySelector('#amoB'),S=ov.querySelector('#amoS'),t0=Date.now();
-   T.textContent='Starting version '+tag;
-   var iv=setInterval(function(){
-    var el=(Date.now()-t0)/1000;
-    if(L.getItem('amogos.boot')==='ok'){ // the new version says it started fine
-     clearInterval(iv);B.style.width='100%';T.textContent='Update complete!';S.textContent='AmogOs '+tag+' is ready';
-     setTimeout(function(){ov.style.opacity='0';setTimeout(function(){ov.remove()},500)},900);return}
-    if(el>MAX){ // never started: drop the update and go back to the built-in version
-     clearInterval(iv);B.style.width='100%';T.textContent='The update did not start';S.textContent='Going back to the built-in version…';
-     wipe();setTimeout(function(){location.reload()},2500);return}
-    B.style.width=Math.min(95,el/EST*100)+'%';
-    S.textContent='Restarting… '+secs(Math.max(1,EST-el))+' left until the update is complete';
-   },200);
-  }catch(e){wipe();location.reload()}
- }
- function swap(code,tag){
-  sessionStorage.setItem('amogos.patchedAt',String(Date.now()));
-  L.setItem('amogos.boot','pending'); // the new version flips this to "ok" once it starts
-  window.__amoSwapped=true;           // tells the OS starter at the bottom of this file to stay quiet
-  var go=function(){host(code,tag)};
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',go);else go();
- }
- try{
-  var url=L.getItem('amogos.releaseUrl'),tag=L.getItem('amogos.releaseTag');
-  if(!url||!tag)return;                          // no update installed
-  if(tag===VER)return;                           // this file IS that release
-  if(!isNewer(tag,VER)){wipe();return}           // saved release is older than this file, so forget it
-  if(L.getItem('amogos.boot')==='pending'){wipe();return} // last update never finished starting: use the built-in version
-  if(Date.now()-(+sessionStorage.getItem('amogos.patchedAt')||0)<4000)return; // loop guard
-  window.__amoHold=true; // keep the OS from starting until we know if the saved update loads
-  readPatch().catch(function(){return null}).then(function(code){
-   if(code&&code.length>1000)return code;
-   return fetch(url).then(function(r){if(!r.ok)throw 0;return r.text()}); // no saved copy: download it again
-  }).then(function(code){swap(code,tag)},function(){
-   wipe();window.__amoHold=false;if(window.__amoStart)window.__amoStart(); // nothing usable: start the built-in version
-  });
- }catch(e){}
-})();
-</script>
 <style>
-/* ===== Design tokens ===== */
-:root{--fs:14px;--acc:#4cc2ff;--bg:#1f1f1f;--sf:#2b2b2b;--bd:#ffffff1c;--tx:#fff;--dim:#ffffff9e;color-scheme:dark}
-*{box-sizing:border-box}
-html,body{height:100%;margin:0;overflow:hidden;background:#000;color:var(--tx);font:400 var(--fs)/1.4 "Segoe UI",system-ui,-apple-system,sans-serif;user-select:none}
-button,input,select,textarea{font:inherit;color:var(--tx)}
-button{background:#ffffff14;border:1px solid var(--bd);border-radius:6px;padding:6px 14px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
-button:hover{background:#ffffff26}button.pri{background:var(--acc);color:#000;border-color:transparent;font-weight:600}
-input,select,textarea{background:#ffffff0d;border:1px solid var(--bd);border-bottom:2px solid #ffffff55;border-radius:6px;padding:7px 10px;outline:0;max-width:100%}
-input:focus,textarea:focus{border-bottom-color:var(--acc)}
-textarea{width:100%;user-select:text}
-a{color:var(--acc)}
-.i{display:inline-flex;vertical-align:middle;flex:none}.i svg{width:100%;height:100%}
-#os,#login,#splash{position:fixed;inset:0}
-#os{display:none;--tk:48px;--ds:26px}
-
-#icons{position:absolute;inset:0;padding:8px;display:grid;grid-auto-flow:column;grid-template-rows:repeat(auto-fill,96px);grid-auto-columns:92px;align-content:start;justify-content:start}
-.ic{width:88px;height:92px;padding:6px 2px;text-align:center;font-size:calc(var(--fs) - 2px);border-radius:6px;cursor:default;text-shadow:0 1px 3px #000;border:1px solid transparent;overflow:hidden}
-.ic:hover{background:#ffffff1f}.ic.sel{background:#4cc2ff38;border-color:#4cc2ff90}.ic .i{display:flex;margin:0 auto 4px}
-.win{position:absolute;display:flex;flex-direction:column;background:var(--bg);border:1px solid #ffffff2e;border-radius:10px;box-shadow:0 14px 44px #000a;overflow:hidden;max-width:100vw}
-.win.max{left:0!important;top:0!important;width:100%!important;height:100%!important;border-radius:0}
-.tb{display:flex;align-items:center;gap:8px;height:34px;background:#272727;padding-left:12px;touch-action:none}
-.tb span.t{flex:1;font-size:calc(var(--fs) - 2px);overflow:hidden;white-space:nowrap}
-.tb button{border:0;border-radius:0;background:0;height:34px;width:44px;padding:0;justify-content:center}.tb button:hover{background:#ffffff1a}.tb .x:hover{background:#e81123}
-.bd{flex:1;position:relative;overflow:hidden}
-.fill{position:absolute;inset:0;display:flex;flex-direction:column}
-.tl{display:flex;gap:6px;align-items:center;padding:8px;background:#2a2a2a;border-bottom:1px solid var(--bd);flex-wrap:wrap}
-.tile{width:92px;text-align:center;padding:8px 4px;border-radius:6px;font-size:calc(var(--fs) - 2px);word-break:break-word;border:1px solid transparent}
-.tile:hover{background:#ffffff12}.tile.sel{background:#4cc2ff30;border-color:var(--acc)}
-.tile .i{display:flex;margin:0 auto 4px}.tile img{width:48px;height:48px;border-radius:4px;object-fit:cover}
-.side div{padding:7px 12px;border-radius:6px;cursor:pointer;margin:2px 6px;display:flex;gap:8px;align-items:center}.side div:hover,.side .on{background:#ffffff18}
-
-.tbtn{position:relative;width:calc(var(--ds) + 18px);height:calc(var(--ds) + 14px);display:flex;align-items:center;justify-content:center;border-radius:6px;cursor:default}
-.tbtn:hover{background:#ffffff1c}.tbtn.run:after{content:"";position:absolute;bottom:2px;width:8px;height:3px;border-radius:2px;background:#ffffff80}.tbtn.act:after{width:16px;background:var(--acc)}
-
-#sm{position:fixed;left:50%;bottom:58px;transform:translateX(-50%);width:min(520px,96vw);display:none;background:#252525f2;backdrop-filter:blur(30px);border:1px solid var(--bd);border-radius:12px;box-shadow:0 10px 40px #000a;z-index:99999}
-#sm .g{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:20px}
-#sm .g div{text-align:center;padding:12px 0;border-radius:8px;font-size:calc(var(--fs) - 2px);cursor:default}#sm .g div:hover{background:#ffffff18}#sm .g div.sel{background:#4cc2ff30}#sm .g .i{display:flex;margin:0 auto 6px}
-#sm .ft{display:flex;justify-content:space-between;align-items:center;padding:12px 20px;background:#00000030;border-radius:0 0 12px 12px}
-#cm{position:fixed;display:none;min-width:200px;background:#2b2b2bf5;backdrop-filter:blur(20px);border:1px solid #ffffff2e;border-radius:8px;padding:4px;box-shadow:0 10px 30px #000b;z-index:9999999}
-#cm div{padding:7px 14px;border-radius:4px;cursor:default}#cm div:hover{background:#ffffff22}#cm hr{border:0;border-top:1px solid var(--bd);margin:4px 6px}
-.av{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#4cc2ff,#8b5cf6);display:inline-flex;align-items:center;justify-content:center;font-weight:600}
-#login,#splash{display:none;overflow:auto;background:radial-gradient(circle at 25% 20%,#1b6bd1,transparent 50%),radial-gradient(circle at 80% 90%,#7a3fd1,transparent 50%),#0a1330}
-#splash{display:flex;align-items:center;justify-content:center;flex-direction:column;background:#000;z-index:9}
-.center{min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;text-align:center}
-.center input{width:300px;margin:5px 0}
-.oobe{width:min(560px,94vw);text-align:left}.oobe h1{font-weight:300;font-size:34px;margin:0 0 8px}.oobe p{color:var(--dim)}
-.oobe input{width:100%;margin:6px 0}.nav{display:flex;justify-content:space-between;margin-top:26px}
-.spin{width:40px;height:40px;border-radius:50%;border:4px solid #ffffff30;border-top-color:#fff;animation:sp 1s linear infinite;margin:20px}@keyframes sp{to{transform:rotate(360deg)}}
-.modal{position:fixed;inset:0;background:#0007;display:flex;align-items:center;justify-content:center;z-index:999998}
-.dlg{background:#2b2b2b;border:1px solid var(--bd);border-radius:10px;padding:20px;width:min(380px,92vw);box-shadow:0 14px 44px #000a}
-#toast{position:fixed;right:14px;bottom:62px;background:#2b2b2b;border:1px solid var(--bd);border-left:4px solid var(--acc);border-radius:8px;padding:12px 16px;box-shadow:0 8px 24px #0009;z-index:99999999;display:none;max-width:300px}
-.bar{height:8px;background:#ffffff1a;border-radius:4px;overflow:hidden;margin:6px 0 14px}.bar i{display:block;height:100%;background:var(--acc)}
-.card{background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:14px;margin-bottom:10px}
-.wp{width:110px;height:68px;border-radius:8px;cursor:pointer;border:2px solid transparent;display:inline-block;margin:0 8px 8px 0;background-size:cover;background-position:center;vertical-align:top}.wp.on{border-color:var(--acc)}
-.cb{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:8px;flex:1}.cb button{font-size:18px;justify-content:center}
-
-/* Paint ribbon */
-.rb{display:flex;flex-wrap:wrap;background:#2a2a2a;border-bottom:1px solid var(--bd)}
-.rg{display:flex;flex-direction:column;align-items:center;justify-content:space-between;gap:4px;padding:6px 8px;border-right:1px solid var(--bd)}
-.rg label{font-size:11px;color:var(--dim);text-align:center}
-.rr{display:flex;gap:4px;flex-wrap:wrap;justify-content:center;align-items:center;max-width:280px}
-.rr button{padding:4px 8px}button.on{background:#4cc2ff40;border-color:var(--acc)}
-.pal{display:grid;grid-template-columns:repeat(10,18px);gap:3px}.pal i{width:18px;height:18px;border-radius:3px;border:1px solid #0008;cursor:pointer}
-.sw{width:30px;height:30px;border-radius:6px;border:2px solid #fff3;cursor:pointer}.sw.on{border-color:var(--acc)}
-.cw{position:relative;box-shadow:0 0 0 1px #000,0 6px 20px #000a}.cw canvas{position:absolute;left:0;top:0;display:block}
-.stb{display:flex;gap:24px;padding:4px 12px;border-top:1px solid var(--bd);font-size:calc(var(--fs) - 2px);color:var(--dim)}
-.trow{display:flex;align-items:center;gap:10px;padding:8px 10px;border-bottom:1px solid var(--bd)}
-.trow:hover{background:#ffffff0d}button:disabled{opacity:.4}
-
-/* Dock (taskbar) layout: position, alignment, auto-hide */
-#desk{position:absolute;overflow:hidden}
-#task{position:fixed;display:flex;align-items:center;justify-content:center;background:#202020d9;backdrop-filter:blur(30px);z-index:99998;transition:transform .2s;padding:4px}
-#pins{display:flex;gap:4px}
-#os[data-dock=bottom] #task,#os[data-dock=top] #task{left:0;right:0;height:var(--tk)}
-#os[data-dock=bottom] #task{bottom:0;padding-bottom:env(safe-area-inset-bottom,0px);border-top:1px solid var(--bd)}
-#os[data-dock=top] #task{top:0;border-bottom:1px solid var(--bd)}
-#os[data-dock=left] #task,#os[data-dock=right] #task{top:0;bottom:0;width:var(--tk);flex-direction:column}
-#os[data-dock=left] #task{left:0;border-right:1px solid var(--bd)}
-#os[data-dock=right] #task{right:0;border-left:1px solid var(--bd)}
-#os[data-dock=left] #pins,#os[data-dock=right] #pins{flex-direction:column}
-#os[data-align=start][data-dock=bottom] #task,#os[data-align=start][data-dock=top] #task{justify-content:flex-start;padding-left:8px}
-#os[data-align=start][data-dock=left] #task,#os[data-align=start][data-dock=right] #task{justify-content:flex-start;padding-top:8px}
-#os[data-dock=bottom] #desk{inset:0 0 var(--tk) 0}#os[data-dock=top] #desk{inset:var(--tk) 0 0 0}
-#os[data-dock=left] #desk{inset:0 0 0 var(--tk)}#os[data-dock=right] #desk{inset:0 var(--tk) 0 0}
-#os[data-hide="1"] #desk{inset:0!important}
-#os[data-hide="1"][data-dock=bottom] #task{transform:translateY(calc(100% - 4px))}
-#os[data-hide="1"][data-dock=top] #task{transform:translateY(calc(-100% + 4px))}
-#os[data-hide="1"][data-dock=left] #task{transform:translateX(calc(-100% + 4px))}
-#os[data-hide="1"][data-dock=right] #task{transform:translateX(calc(100% - 4px))}
-#os[data-hide="1"] #task:hover{transform:none}
-#tray{position:absolute;font-size:calc(var(--fs) - 2px);line-height:1.2;text-align:right}
-#os[data-dock=bottom] #tray,#os[data-dock=top] #tray{right:12px}
-#os[data-dock=left] #tray,#os[data-dock=right] #tray{bottom:8px;left:0;right:0;text-align:center}
-#os[data-clock="0"] #tray{display:none}
-#os[data-start="0"] .tbtn[data-n=_s]{display:none}
-/* Screen overlays and accessibility */
-#dim,#night{position:fixed;inset:0;pointer-events:none;opacity:0;z-index:99999990;transition:opacity .2s}
-#dim{background:#000}#night{background:#ff8a2b;mix-blend-mode:multiply}
-html[data-hc="1"]{--bg:#000;--sf:#0d0d0d;--bd:#ffffffb0;--dim:#fff}
-html[data-hc="1"] button,html[data-hc="1"] input,html[data-hc="1"] select{border-color:#fff}
-html[data-rm="1"] *{transition:none!important;animation:none!important}
-html[data-bc="1"] *{cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32'%3E%3Cpath d='M3 2l22 12-9 2 5 9-4 2-5-9-7 6z' fill='white' stroke='black' stroke-width='2'/%3E%3C/svg%3E") 3 2,auto!important}
-/* Settings rows */
-.row2{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--bd)}.row2:last-child{border:0}
-.row2 small{display:block;color:var(--dim)}
-input.tg{appearance:none;-webkit-appearance:none;width:42px;height:22px;border-radius:11px;background:#ffffff30;border:0;position:relative;cursor:pointer;padding:0;flex:none}
-input.tg:after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .15s}
-input.tg:checked{background:var(--acc)}input.tg:checked:after{left:23px;background:#000}
-input[type=range]{padding:0;border:0;background:none;accent-color:var(--acc)}
-.sw2{display:inline-block;width:28px;height:28px;border-radius:50%;margin:0 8px 8px 0;cursor:pointer;border:2px solid transparent}.sw2.on{border-color:#fff}
-.tabs{display:flex;align-items:flex-end;gap:2px;background:#202020;padding:6px 6px 0;overflow-x:auto;flex:none}
-.tab{padding:6px 10px;border-radius:8px 8px 0 0;background:#ffffff10;max-width:200px;white-space:nowrap;display:flex;gap:10px;align-items:center;cursor:default}
-.tab span:first-child{overflow:hidden;text-overflow:ellipsis}.tab.on{background:var(--bg)}
-.bmbar{display:none;gap:4px;padding:4px 8px;border-bottom:1px solid var(--bd);overflow-x:auto;flex:none}.bmk{padding:3px 10px;white-space:nowrap}
-.hi{padding:6px 8px;border-radius:6px;cursor:default}.hi:hover{background:#ffffff14}.hi small{color:var(--dim);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.scard{width:210px;background:var(--sf);border:1px solid var(--bd);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
-#sm .g{max-height:60vh;overflow:auto}
-/* Software update notification (top right corner) */
-.uprog{height:8px;background:#ffffff26;border-radius:4px;overflow:hidden;margin:0 0 12px}.uprog i{display:block;height:100%;width:0;background:var(--acc);transition:width .2s}
-.unote{position:fixed;top:14px;right:14px;z-index:99999995;width:290px;background:var(--sf);border:1px solid var(--bd);border-radius:12px;padding:14px;box-shadow:0 12px 36px #0009}
+/* AmogOs launcher: a tiny page that sets up your PC, then runs the real OS from the browser cache. */
+html,body{margin:0;height:100%;background:#0a1330;overflow:hidden}
+/* The OS runs inside this full-screen frame */
+#h{position:fixed;left:0;top:0;width:100%;height:100%;border:0;background:#000}
+/* The "setting up" screen that sits on top until the OS is ready */
+#u{position:fixed;left:0;top:0;width:100%;height:100%;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+ background:linear-gradient(135deg,#0a1330,#1a1148 60%,#2a0b3f);color:#fff;font:16px "Segoe UI",system-ui,sans-serif;text-align:center;padding:20px;box-sizing:border-box;transition:opacity .5s}
+#u svg{width:96px;height:96px}
+#t{font-size:26px;font-weight:600}
+#s{opacity:.8;max-width:520px;min-height:22px}
+#bw{width:280px;height:8px;border-radius:4px;background:rgba(255,255,255,.15);overflow:hidden}
+#b{height:100%;width:0;background:#4cc2ff;transition:width .3s}
+#e{opacity:.65;font-size:14px;min-height:18px}
+#x{display:none;max-width:560px;max-height:26vh;overflow:auto;text-align:left;background:rgba(0,0,0,.35);padding:10px;border-radius:8px;font:13px Consolas,monospace;white-space:pre-wrap}
+button{padding:9px 18px;border-radius:8px;border:0;background:#4cc2ff;color:#001a26;font:600 15px "Segoe UI",system-ui,sans-serif;cursor:pointer;display:none}
 </style>
 </head>
 <body>
-<div id="splash"></div>
-<div id="login"></div>
-<div id="os" data-dock="bottom">
-  <div id="desk"><div id="icons"></div></div>
-  <div id="sm"></div>
-  <div id="task"><div id="pins" style="display:flex;gap:4px"></div><div id="tray"></div></div>
+<div id="u">
+  <!-- the AmogOs planet -->
+  <svg viewBox="0 0 96 96" aria-hidden="true"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#67e8f9"/><stop offset="1" stop-color="#8b5cf6"/></linearGradient>
+   <clipPath id="f"><rect x="0" y="48" width="96" height="48"/></clipPath></defs>
+   <g transform="rotate(-18 48 48)"><ellipse cx="48" cy="48" rx="42" ry="14" fill="none" stroke="#f0abfc" stroke-width="4.5"/></g>
+   <circle cx="48" cy="48" r="24" fill="url(#g)"/>
+   <g transform="rotate(-18 48 48)"><ellipse cx="48" cy="48" rx="42" ry="14" fill="none" stroke="#f0abfc" stroke-width="4.5" clip-path="url(#f)"/></g></svg>
+  <div id="t">Setting up your PC</div>
+  <div id="s">Please wait…</div>
+  <div id="bw"><div id="b"></div></div>
+  <div id="e"></div>
+  <pre id="x"></pre>
+  <button id="r">Try again</button>
 </div>
-<div id="cm"></div>
-<div id="dim"></div><div id="night"></div>
-<div id="toast"></div>
-<input type="file" id="wpf" accept="image/*" hidden>
-<script type="text/plain" id="amogos-main">
-"use strict";
-/* ================= Helpers ================= */
-const $=(s,e=document)=>e.querySelector(s);
-const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const enc=new TextEncoder(),dec=new TextDecoder();
-/* ----- Settings store: per-user, with defaults ----- */
-const OS_VERSION=(document.querySelector('meta[name=amogos-version]')||{}).content||'1.1.2',OS_REPO='FallGameDev/OS.Lite'; // the version is the <meta name=amogos-version> tag at the top of this file
-const STORE_RAW='https://raw.githubusercontent.com/FallGameDev/OS.Lite/main/apps/'; // app packages live in the apps folder of OS.Lite
-const DEF={device:'AMOG-PC',h24:false,secs:false,dfmt:'short',confirmDel:false,maxWin:false,brightness:100,scale:100,night:false,nightAmt:30,sounds:true,volume:60,dock:'bottom',dockSize:'m',align:'center',autohide:false,clock:true,showStart:true,textSize:14,hc:false,rm:false,bigcur:false,filter:'none',notif:true,dur:3,accent:'#4cc2ff',engine:'google',edgeUrl:'https://mcqpodbwtwhjhkycwhzf.supabase.co/functions/v1/fetch-page',edgeKey:'',proxy:'',storeSrc:'',startApps:true,autoUpdate:true};
-const S=()=>Object.assign({},DEF,me&&U()?U().set:{});
-const DS={s:22,m:26,l:32},dsz=()=>DS[S().dockSize]||26;
-const ACC=['#4cc2ff','#8b5cf6','#ec4899','#f97316','#22c55e','#eab308','#ef4444'];
-const zf=()=>+$('#os').style.zoom||1;
-
-
-/* ----- Colored SVG icon set (no emoji anywhere) ----- */
-const P=b=>`<svg viewBox="0 0 48 48">${b}</svg>`;
-const IC={
- folder:P('<path fill="#f0a830" d="M4 11a3 3 0 0 1 3-3h11l4 5h19a3 3 0 0 1 3 3v22a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3z"/><path fill="#ffc94d" d="M4 19a3 3 0 0 1 3-3h34a3 3 0 0 1 3 3v19a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3z"/>'),
- doc:P('<path fill="#f4f6fa" d="M10 4h20l10 10v28a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path fill="#c5d0e6" d="M30 4l10 10h-8a2 2 0 0 1-2-2z"/><path stroke="#4a7bd6" stroke-width="3" stroke-linecap="round" d="M14 24h20M14 31h20M14 38h12"/>'),
- image:P('<rect x="4" y="8" width="40" height="32" rx="4" fill="#3b82f6"/><circle cx="16" cy="19" r="4" fill="#ffd84d"/><path fill="#22c55e" d="M4 36l12-12 9 9 7-7 12 12v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/>'),
- notes:P('<rect x="8" y="5" width="32" height="38" rx="4" fill="#ffd84d"/><rect x="8" y="5" width="32" height="9" rx="4" fill="#f59e0b"/><path stroke="#8a5a00" stroke-width="3" stroke-linecap="round" d="M14 23h20M14 30h20M14 37h12"/>'),
- paint:P('<path fill="#e9e4da" d="M24 5C12 5 4 13 4 23s7 20 17 20c4 0 5-3 3-5s-1-5 3-5h7c6 0 10-3 10-9C44 12 35 5 24 5z"/><circle cx="14" cy="22" r="3.5" fill="#ef4444"/><circle cx="21" cy="13" r="3.5" fill="#3b82f6"/><circle cx="32" cy="14" r="3.5" fill="#22c55e"/><circle cx="38" cy="24" r="3.5" fill="#facc15"/>'),
- globe:P('<circle cx="24" cy="24" r="20" fill="#2f8cff"/><path fill="#3ccf6e" d="M12 14c5-3 9-1 9 3s-5 4-5 9-5 3-7-2c-2-4-1-8 3-10zM28 8c5 0 11 4 13 10-4 1-6-2-9-1s-4-5-4-9zM30 27c4-2 9 0 10 4-2 6-7 10-12 10 2-4-2-6 2-14z"/><circle cx="24" cy="24" r="20" fill="none" stroke="#1e5fc2" stroke-width="2"/>'),
- calc:P('<rect x="8" y="4" width="32" height="40" rx="5" fill="#4b5563"/><rect x="12" y="8" width="24" height="9" rx="2" fill="#9be7c4"/><g fill="#f97316"><rect x="12" y="21" width="6" height="6" rx="1.5"/><rect x="21" y="21" width="6" height="6" rx="1.5"/><rect x="30" y="21" width="6" height="6" rx="1.5"/></g><g fill="#e5e7eb"><rect x="12" y="30" width="6" height="6" rx="1.5"/><rect x="21" y="30" width="6" height="6" rx="1.5"/></g><rect x="30" y="30" width="6" height="10" rx="1.5" fill="#3b82f6"/>'),
- gear:P('<circle cx="24" cy="24" r="15" fill="none" stroke="#9ca3af" stroke-width="7" stroke-dasharray="5.2 4.2"/><circle cx="24" cy="24" r="12" fill="#cbd5e1"/><circle cx="24" cy="24" r="5" fill="#475569"/>'),
- win:P('<defs><linearGradient id="gw" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#67e8f9"/><stop offset="1" stop-color="#8b5cf6"/></linearGradient></defs><ellipse cx="24" cy="25" rx="21" ry="7" fill="none" stroke="#f0abfc" stroke-width="3.5" transform="rotate(-18 24 24)"/><circle cx="24" cy="24" r="11.5" fill="url(#gw)"/><path fill="none" stroke="#f0abfc" stroke-width="3.5" stroke-linecap="round" d="M8.5 29.5A21 7 0 0 0 39.5 18.5" transform="rotate(0 24 24)" opacity=".0"/>'),
- trash:P('<path fill="#94a3b8" d="M10 15h28l-3 27a3 3 0 0 1-3 3H16a3 3 0 0 1-3-3z"/><rect x="7" y="9" width="34" height="5" rx="2.5" fill="#cbd5e1"/><rect x="18" y="4" width="12" height="5" rx="2" fill="#cbd5e1"/><path stroke="#64748b" stroke-width="3" stroke-linecap="round" d="M19 22v16M24 22v16M29 22v16"/>'),
- trashfull:P('<path fill="#fde68a" d="M12 12l7-7 6 5zM26 10l8-5 4 8z"/><path fill="#fca5a5" d="M17 12l6-6 7 6z"/><path fill="#94a3b8" d="M10 15h28l-3 27a3 3 0 0 1-3 3H16a3 3 0 0 1-3-3z"/><rect x="7" y="11" width="34" height="5" rx="2.5" fill="#cbd5e1"/><path stroke="#64748b" stroke-width="3" stroke-linecap="round" d="M19 24v14M24 24v14M29 24v14"/>'),
- speaker:P('<path fill="#60a5fa" d="M6 18h8l10-8v28l-10-8H6z"/><path fill="none" stroke="#93c5fd" stroke-width="4" stroke-linecap="round" d="M31 16a11 11 0 0 1 0 16M36 10a19 19 0 0 1 0 28"/>'),
- dock:P('<rect x="4" y="7" width="40" height="28" rx="4" fill="#475569"/><rect x="8" y="31" width="32" height="11" rx="5.5" fill="#cbd5e1"/><circle cx="16" cy="36.5" r="3" fill="#3b82f6"/><circle cx="24" cy="36.5" r="3" fill="#f59e0b"/><circle cx="32" cy="36.5" r="3" fill="#22c55e"/>'),
- access:P('<circle cx="24" cy="24" r="20" fill="#3b82f6"/><circle cx="24" cy="13" r="3.5" fill="#fff"/><path stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none" d="M12 19l12 3 12-3M24 22v10M24 32l-6 9M24 32l6 9"/>'),
- bell:P('<path fill="#fbbf24" d="M24 5a3 3 0 0 1 3 3v1c6 1 10 6 10 12v8l4 5H7l4-5v-8c0-6 4-11 10-12V8a3 3 0 0 1 3-3z"/><path fill="#f59e0b" d="M19 40a5 5 0 0 0 10 0z"/>'),
- info:P('<circle cx="24" cy="24" r="20" fill="#06b6d4"/><rect x="21.5" y="21" width="5" height="14" rx="2.5" fill="#fff"/><circle cx="24" cy="14.5" r="3" fill="#fff"/>'),
- store:P('<path fill="#f97316" d="M8 16h32l-2 26H10z"/><path fill="none" stroke="#fed7aa" stroke-width="4" stroke-linecap="round" d="M17 20v-6a7 7 0 0 1 14 0v6"/>'),
- app:P('<rect x="5" y="5" width="38" height="38" rx="10" fill="#8b5cf6"/><path fill="#fff" d="M19 14l16 10-16 10z"/>'),
- monitor:P('<rect x="4" y="7" width="40" height="27" rx="3" fill="#3b82f6"/><rect x="7" y="10" width="34" height="21" rx="1" fill="#7dc4ff"/><path fill="#94a3b8" d="M18 38h12l2 5H16z"/>'),
- drive:P('<rect x="4" y="14" width="40" height="22" rx="4" fill="#94a3b8"/><rect x="4" y="26" width="40" height="10" rx="3" fill="#64748b"/><circle cx="37" cy="31" r="2.5" fill="#4ade80"/>'),
- down:P('<circle cx="24" cy="24" r="20" fill="#22c55e"/><path stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none" d="M24 12v20M15 24l9 9 9-9"/>'),
- user:P('<circle cx="24" cy="17" r="9" fill="#8b5cf6"/><path fill="#6d28d9" d="M6 42c0-10 8-16 18-16s18 6 18 16z"/>'),
- cloud:P('<path fill="#60a5fa" d="M14 38a10 10 0 0 1-1-20 12 12 0 0 1 23 3 8.5 8.5 0 0 1-1 17z"/>'),
- key:P('<circle cx="16" cy="24" r="10" fill="#facc15"/><circle cx="16" cy="24" r="4" fill="#92400e"/><path fill="#eab308" d="M24 21h20v6h-4v5h-5v-5h-11z"/>'),
- brush:P('<path fill="#a855f7" d="M40 4c3 0 5 2 4 5L28 28l-7-7z"/><path fill="#ec4899" d="M19 24l5 5c0 7-5 13-14 13 3-3 2-6 2-8 0-5 3-10 7-10z"/>'),
- power:P('<path fill="none" stroke="#f87171" stroke-width="5" stroke-linecap="round" d="M24 6v16M13 13a16 16 0 1 0 22 0"/>')
-};
-const ic=(n,s=24)=>`<span class="i" style="width:${s}px;height:${s}px">${IC[n]}</span>`;
-const typeIcon=r=>r.t==='d'?'folder':r.m.startsWith('image')?'image':'doc';
-
-/* Product keys: each UUID unlocks a storage size in GB */
-const KEYS={
- '3f9a1c2e-7b4d-4e8a-9c31-5a2d6e7f8b01':32,
- '8d2b4f6a-1c3e-4a5b-b7d9-0e1f2a3b4c5d':64,
- 'c4e7a9b1-2d5f-4836-8a0b-9c1d2e3f4a6b':128,
- '1b6d8f0a-3c5e-4d72-a9b4-6c8e0f1a2b3c':256,
- '9e0f2a4c-6b8d-4f1e-b3a5-7d9c1e2f3a4b':1024
-};
-const DEFAULT_GB=16, SYS=6e9, SCALE=300;
-
-let tt;function toast(m){const s=S();if(me&&!s.notif&&!/isn’t|couldn’t|can’t|don’t|full|incorrect|already|Enter |Choose |Select|Name the/i.test(m))return;const t=$('#toast');t.textContent=m;t.style.display='block';clearTimeout(tt);tt=setTimeout(()=>t.style.display='none',s.dur*1000)}
-function ask(msg,def){ // def===null: yes/no, otherwise text prompt
- return new Promise(res=>{
-  const m=document.createElement('div');m.className='modal';
-  m.innerHTML=`<div class="dlg"><p style="margin-top:0">${msg}</p>${def===null?'':'<input id="ai" style="width:100%">'}<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px"><button class="pri" id="ok">OK</button><button id="no">Cancel</button></div></div>`;
-  document.body.appendChild(m);const i=$('#ai',m);if(i){i.value=def||'';i.focus();i.select();i.onkeydown=e=>{if(e.key==='Enter')$('#ok',m).click()}}
-  const done=v=>{m.remove();res(v)};
-  $('#ok',m).onclick=()=>done(def===null?true:i.value);$('#no',m).onclick=()=>done(def===null?false:null);
- });
-}
-function beep(){const s=S();if(!s.sounds)return;try{const a=new(window.AudioContext||window.webkitAudioContext)(),o=a.createOscillator(),g=a.createGain();o.frequency.value=660;g.gain.value=.06*s.volume/100;o.connect(g);g.connect(a.destination);o.start();o.stop(a.currentTime+.05)}catch(e){}}
-
-/* ----- Double-click helper: the 2nd click on the same thing within 0.5s counts (works on touch too) ----- */
-let lt=0,lk=null;function dbl(key,fn){const n=Date.now();if(lk===key&&n-lt<500){lk=null;fn();return true}lk=key;lt=n;return false}
-
-/* ----- Right-click context menu: items are [label, fn] or '-' ----- */
-const cm=$('#cm');
-function menu(e,items){
- e.preventDefault();e.stopPropagation();
- cm.innerHTML=items.map((it,i)=>it==='-'?'<hr>':`<div data-k="${i}">${esc(it[0])}</div>`).join('');cm.style.display='block';
- cm.style.left=Math.min(e.clientX,innerWidth-cm.offsetWidth-6)+'px';cm.style.top=Math.min(e.clientY,innerHeight-cm.offsetHeight-6)+'px';
- cm.onclick=ev=>{const k=ev.target.dataset.k;if(k==null)return;cm.style.display='none';items[k][1]()};
-}
-addEventListener('pointerdown',e=>{if(!cm.contains(e.target))cm.style.display='none'},true);
-addEventListener('keydown',e=>{if(e.key==='Escape')cm.style.display='none'});
-addEventListener('blur',()=>cm.style.display='none');
-document.addEventListener('contextmenu',e=>{if(!e.target.closest('input,textarea,iframe'))e.preventDefault()}); // no browser menu on the OS itself
-
-/* ---- crypto: password hash + AES-GCM sealed backups ---- */
-const b64=u=>{let s='';new Uint8Array(u).forEach(c=>s+=String.fromCharCode(c));return btoa(s)};
-const ub=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
-async function sha(t){return b64(await crypto.subtle.digest('SHA-256',enc.encode(t)))}
-async function dkey(pw,salt){const m=await crypto.subtle.importKey('raw',enc.encode(pw),'PBKDF2',false,['deriveKey']);return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:150000,hash:'SHA-256'},m,{name:'AES-GCM',length:256},false,['encrypt','decrypt'])}
-async function seal(obj,pw){const salt=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(12));const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},await dkey(pw,salt),enc.encode(JSON.stringify(obj)));return JSON.stringify({amogos:1,salt:b64(salt),iv:b64(iv),data:b64(ct)})}
-async function unseal(txt,pw){const j=JSON.parse(txt);const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:ub(j.iv)},await dkey(pw,ub(j.salt)),ub(j.data));return JSON.parse(dec.decode(pt))}
-
-/* ================= Storage (localStorage) ================= */
-let DB={users:{}};
-/* Everything lives in memory and is saved to IndexedDB (room for big files). Older localStorage saves are picked up once. */
-const idb=new Promise((res,rej)=>{try{const r=indexedDB.open('amogos',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)}catch(e){rej(e)}});idb.catch(()=>{});
-async function loadDB(){
- try{const db=await idb,v=await new Promise(ok=>{const q=db.transaction('kv').objectStore('kv').get('db');q.onsuccess=()=>ok(q.result);q.onerror=()=>ok(null)});if(v&&v.users)DB=v}catch(e){}
- if(!Object.keys(DB.users).length){try{const o=JSON.parse(localStorage.getItem('amogos'));if(o&&o.users)DB=o}catch(e){}}
-}
-let pt;function persist(){clearTimeout(pt);pt=setTimeout(async()=>{try{const db=await idb;db.transaction('kv','readwrite').objectStore('kv').put(DB,'db')}catch(e){try{localStorage.setItem('amogos',JSON.stringify(DB))}catch(e2){toast('The drive couldn’t be written to.')}}},250)}
-addEventListener('pagehide',()=>{clearTimeout(pt);idb.then(db=>db.transaction('kv','readwrite').objectStore('kv').put(DB,'db')).catch(()=>{})});
-let me=null;const U=()=>DB.users[me];
-const fmt=b=>b>=1e12?(b/1e12).toFixed(2)+' TB':b>=1e9?(b/1e9).toFixed(1)+' GB':(b/1e6).toFixed(0)+' MB';
-const gbName=g=>g>=1024?'1 TB':g+' GB';
-const used=u=>SYS+(JSON.stringify(u.fs).length+JSON.stringify(u.trash||[]).length)*SCALE;
-function save(){
- const u=U();if(u&&used(u)>u.gb*1e9){toast('There isn’t enough space on this drive. Free up space or upgrade your storage.');return false}
- persist();return true;
-}
-/* Files: flat object, path -> {t:'d'|'f', m:mime, d:base64 data URL} */
-const toData=(t,m='text/plain')=>`data:${m};base64,`+btoa(unescape(encodeURIComponent(t)));
-const fromData=d=>decodeURIComponent(escape(atob(d.split(',')[1])));
-const parent=p=>p.slice(0,p.lastIndexOf('/'))||'/';
-const join=(d,n)=>(d==='/'?'':d)+'/'+n;
-const base=p=>p.split('/').pop();
-function put(p,rec){
- const fs=U().fs,old=fs[p],made=[];
- for(let d=parent(p);d!=='/'&&!fs[d];d=parent(d)){fs[d]={t:'d'};made.push(d)}
- fs[p]=rec;
- if(!save()){old?fs[p]=old:delete fs[p];made.forEach(d=>delete fs[d]);return false}
- return true;
-}
-const starterFS=()=>({'/Desktop':{t:'d'},'/Documents':{t:'d'},'/Pictures':{t:'d'},'/Downloads':{t:'d'},'/Applications':{t:'d'},
- '/Documents/Welcome.txt':{t:'f',m:'text/plain',d:toData('Welcome to AmogOs!\n\nRight-click anywhere to see options. Double-click icons to open them.')}});
-function download(name,url){const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove()}
-
-/* ----- Shared file actions (used by Files, the desktop, and menus) ----- */
-const views=[]; // open Files windows, so they redraw when files change
-function refreshAll(){renderDesk();renderStart();views.forEach(v=>v.b.isConnected&&v.draw())}
-async function newItem(dir,kind){
- const n=await ask(kind==='d'?'Name for the new folder':'Name for the new file',kind==='d'?'New folder':'New document.txt');if(!n)return;
- const p=join(dir,n);if(U().fs[p])return toast('That name is already used');
- if(kind==='d'){U().fs[p]={t:'d'};save()}else put(p,{t:'f',m:'text/plain',d:toData('')});refreshAll();
-}
-async function renItem(p){
- const n=await ask('New name',base(p));if(!n)return;const q=join(parent(p),n),fs=U().fs;if(fs[q])return toast('That name is already used');
- Object.keys(fs).forEach(k=>{if(k===p||k.startsWith(p+'/')){fs[q+k.slice(p.length)]=fs[k];delete fs[k]}});
- if(U().wallImg===p)U().wallImg=q;save();refreshAll();applyWall();
-}
-function setWall(p){U().wallImg=p;save();applyWall();toast('Desktop background changed')}
-function openPath(p){const r=U().fs[p];if(!r)return;r.t==='d'?openApp('Files',p):openFile(p)}
-
-/* ----- File types: HTML pages and .amo apps ----- */
-const isFile=p=>U().fs[p]&&U().fs[p].t==='f';
-const isAmo=p=>isFile(p)&&/\.amo$/i.test(p);
-const isHtml=p=>isFile(p)&&(/\.html?$/i.test(p)||U().fs[p].m==='text/html');
-const textOf=d=>{try{return fromData(d)}catch(e){return atob(d.split(',')[1])}};
-
-/* ----- .amo apps: a JSON package {amo:1,id,name,icon,width,height,entry,files:{path:base64}} ----- */
-const amoMetaC={};
-function amoMeta(p){ // name and icon only, cached so the desktop and Files stay fast
- const r=U().fs[p];if(!r)return null;const k=p+':'+r.d.length;
- if(!(k in amoMetaC)){try{const o=JSON.parse(atob(r.d.split(',')[1]));amoMetaC[k]={name:o.name,icon:o.icon}}catch(e){amoMetaC[k]=null}}
- return amoMetaC[k];
-}
-function amoBuild(pkg){ // turns the package into one page: inlines css/js and swaps file paths for data URLs
- const F=pkg.files,mime={png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',gif:'image/gif',webp:'image/webp',mp3:'audio/mpeg',ogg:'audio/ogg',wav:'audio/wav',woff2:'font/woff2',woff:'font/woff',ttf:'font/ttf',svg:'image/svg+xml',json:'application/json'};
- const asset={};for(const k in F)if(!/\.(html?|css|js)$/i.test(k))asset[k]='data:'+(mime[k.split('.').pop().toLowerCase()]||'application/octet-stream')+';base64,'+F[k];
- const keys=Object.keys(asset).sort((a,c)=>c.length-a.length);
- const sub=t=>{for(const k of keys){t=t.split('./'+k).join(asset[k]);t=t.split(k).join(asset[k])}return t};
- const u8=k=>decodeURIComponent(escape(atob(F[k])));
- let html=u8(pkg.entry||'index.html');
- html=html.replace(/<link[^>]+href=["']([^"']+)["'][^>]*>/gi,(m,h)=>{const k=h.replace(/^\.\//,'');return F[k]&&/\.css$/i.test(k)?'<style>'+sub(u8(k))+'</style>':m});
- html=html.replace(/<script[^>]+src=["']([^"']+)["'][^>]*><\/script>/gi,(m,s)=>{const k=s.replace(/^\.\//,'');return F[k]?'<script>'+sub(u8(k)).replace(/<\/script/gi,'<\\/script')+'<'+'/script>':m});
- return sub(html);
-}
-function amoRun(p){
- let pkg;try{pkg=JSON.parse(atob(U().fs[p].d.split(',')[1]));if(pkg.amo!==1||!pkg.files)throw 0}catch(e){return toast('That app package couldn’t be opened.')}
- openWin({n:'App:'+(pkg.id||pkg.name),i:'app',img:pkg.icon},pkg.name||base(p),Math.min(pkg.width||900,innerWidth-10),Math.min(pkg.height||560,innerHeight-100),b=>{
-  b.innerHTML='<div class="fill" style="align-items:center;justify-content:center;background:#000"><div class="spin"></div></div>';
-  setTimeout(()=>{try{const w=document.createElement('div');w.className='fill';const f=document.createElement('iframe');f.style.cssText='flex:1;border:0;background:#000';f.setAttribute('sandbox','allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-pointer-lock');f.dataset.amo='1';f.setAttribute('allow','autoplay;fullscreen;gamepad;clipboard-write;pointer-lock');f.srcdoc=amoBuild(pkg);f.addEventListener('load',()=>{try{f.contentWindow.focus()}catch(e){}});w.appendChild(f);b.innerHTML='';b.appendChild(w)}catch(e){toast('This app couldn’t start.')}},60);
- });
-}
-
-/* ----- Trash: deleted items wait here until restored or deleted forever ----- */
-const trashList=()=>U().trash=U().trash||[];
-function toTrash(p){
- const fs=U().fs,items={};Object.keys(fs).forEach(k=>{if(k===p||k.startsWith(p+'/')){items[k]=fs[k];delete fs[k]}});
- trashList().push({id:Date.now()+'-'+Math.random().toString(36).slice(2),name:base(p),from:p,items});
- save();refreshAll();applyWall();toast('Moved to Trash');
-}
-const delItem=async p=>{if(S().confirmDel&&!await ask('Move “'+esc(base(p))+'” to the Trash?',null))return;toTrash(p)};
-function restoreItem(id){
- const t=trashList(),i=t.findIndex(x=>x.id===id);if(i<0)return;const x=t[i],fs=U().fs;let to=x.from;
- if(fs[to]){const n=base(to),d=n.lastIndexOf('.');to=join(parent(to),d>0?n.slice(0,d)+' (restored)'+n.slice(d):n+' (restored)')}
- for(let d=parent(to);d!=='/'&&!fs[d];d=parent(d))fs[d]={t:'d'};
- Object.keys(x.items).forEach(k=>fs[to+k.slice(x.from.length)]=x.items[k]);
- t.splice(i,1);save();refreshAll();applyWall();
-}
-async function purge(id){
- const t=trashList(),i=t.findIndex(x=>x.id===id);if(i<0)return;
- if(!await ask('Delete “'+esc(t[i].name)+'” forever? This can’t be undone.',null))return;
- t.splice(i,1);save();refreshAll();
-}
-async function emptyTrash(){
- const t=trashList();if(!t.length)return toast('The Trash is already empty');
- if(!await ask('Permanently delete all '+t.length+' items in the Trash?',null))return;
- U().trash=[];save();refreshAll();
-}
-function trashApp(b){
- const draw=()=>{const t=trashList();
-  b.innerHTML=`<div class="fill"><div class="tl"><button data-a="empty" ${t.length?'':'disabled'}>Empty Trash</button><button data-a="all" ${t.length?'':'disabled'}>Restore all</button><span style="margin-left:auto;color:var(--dim)">${t.length} item${t.length===1?'':'s'}</span></div><div style="flex:1;overflow:auto;padding:8px">${t.map(x=>{const r=x.items[x.from];return`<div class="trow" data-id="${x.id}">${r.t==='d'?ic('folder',32):r.m&&r.m.startsWith('image')?`<span class="i" style="width:32px;height:32px"><img src="${r.d}" style="width:100%;height:100%;border-radius:4px;object-fit:cover"></span>`:ic(/\.amo$/i.test(x.name)?'app':typeIcon(r),32)}<div style="flex:1;min-width:0"><div>${esc(x.name)}</div><div style="color:var(--dim);font-size:12px">From ${esc(parent(x.from))}</div></div><button data-a="res">Restore</button><button data-a="del">Delete forever</button></div>`}).join('')||'<div style="text-align:center;margin-top:60px;color:var(--dim)">'+ic('trash',64)+'<p>The Trash is empty</p></div>'}</div></div>`;
- };
- b.onclick=e=>{const a=e.target.dataset.a,row=e.target.closest('.trow');
-  if(a==='empty')emptyTrash();else if(a==='all')[...trashList()].forEach(x=>restoreItem(x.id));
-  else if(a==='res')restoreItem(row.dataset.id);else if(a==='del')purge(row.dataset.id)};
- b.oncontextmenu=e=>{const row=e.target.closest('.trow');menu(e,row?[['Restore',()=>restoreItem(row.dataset.id)],['Delete forever',()=>purge(row.dataset.id)]]:[['Empty Trash',emptyTrash]])};
- views.push({b,draw});draw();
-}
-
-/* ----- Menus and opening files ----- */
-function openFile(p){
- const r=U().fs[p],n=base(p);
- if(isLnk(p)){if(U().fs[r.d])amoRun(r.d);else toast('That app was removed')}
- else if(isAmo(p))amoOpen(p);
- else if(isHtml(p))openApp('Comet',p);
- else if(r.m.startsWith('text'))openApp('Notes',p);
- else if(r.m.startsWith('image'))openWin({n:'Viewer',i:'image'},n,480,340,b=>{b.innerHTML=`<div class="fill" style="align-items:center;justify-content:center;background:#111"><img src="${r.d}" style="max-width:100%;max-height:100%"></div>`;b.oncontextmenu=e=>menu(e,[['Set as desktop background',()=>setWall(p)],['Download',()=>download(n,r.d)]])});
- else download(n,r.d);
-}
-
-/* ----- Applications folder and desktop shortcuts ----- */
-const APPDIR='/Applications';
-const isLnk=p=>isFile(p)&&/\.lnk$/i.test(p)&&U().fs[p].m==='application/x-amo-shortcut';
-const label=p=>base(p).replace(/\.lnk$/i,'');
-const ensureApps=()=>{if(!U().fs[APPDIR])U().fs[APPDIR]={t:'d'}};
-const safeName=n=>String(n).replace(/[\\/:*?"<>|]/g,'').trim()||'App';
-function installAmo(text,name,shortcut){ // saves an app package in Applications, optionally adds a desktop shortcut
- ensureApps();const p=join(APPDIR,safeName(name)+'.amo');
- if(!put(p,{t:'f',m:'application/x-amo',d:toData(text,'application/x-amo')}))return null;
- if(shortcut)addShortcut(p);refreshAll();return p;
-}
-function addShortcut(p){const n=safeName((amoMeta(p)||{}).name||base(p).replace(/\.amo$/i,''));put(join('/Desktop',n+'.lnk'),{t:'f',m:'application/x-amo-shortcut',d:p})}
-function amoOpen(p){ // opening an app file moves it into Applications, then runs it
- let q=p;
- if(parent(p)!==APPDIR){ensureApps();q=join(APPDIR,base(p));const fs=U().fs;if(!fs[q]){fs[q]=fs[p];delete fs[p];save();refreshAll();toast('Added to the Applications folder')}}
- amoRun(q);
-}
-function renderStart(){ // Start menu: built-in apps plus everything in Applications
- if(!me)return;const inst=Object.keys(U().fs).filter(p=>parent(p)===APPDIR&&isAmo(p)).sort();
- $('#sm').innerHTML=`<div class="g">${APPS.filter(a=>!a.hide).map(a=>`<div data-n="${a.n}">${ic(a.i,36)}${a.n}</div>`).join('')}${S().startApps?inst.map(p=>`<div data-amo="${esc(p)}">${fileIcon(p,36)}${esc(((amoMeta(p)||{}).name||base(p)).slice(0,14))}</div>`).join(''):''}</div><div class="ft"><span><span class="av">${esc(me[0].toUpperCase())}</span> &nbsp;${esc(me)}</span><button data-n="_out">${ic('power',16)} Sign out</button></div>`;
-}
-function fileIcon(p,s){ // picture thumbnails, app icons, shortcut arrows, otherwise a colored type icon
- const r=U().fs[p],lt=isLnk(p)?r.d:null,tp=lt&&U().fs[lt]?lt:(isAmo(p)?p:null),m=tp?amoMeta(tp):null,src=r.m&&r.m.startsWith('image')?r.d:m&&m.icon;
- const arrow=lt?'<span style="position:absolute;left:0;bottom:0;width:40%;height:40%;background:#fff;border-radius:4px;display:flex"><svg viewBox="0 0 24 24"><path d="M5 19V11h9V6l6 7-6 7v-5z" fill="#2563eb"/></svg></span>':'';
- return src?`<span class="i" style="width:${s}px;height:${s}px;position:relative"><img src="${src}" style="width:100%;height:100%;border-radius:${m?10:4}px;object-fit:cover">${arrow}</span>`:ic(tp?'app':typeIcon(r),s);
-}
-function itemMenu(p,openFn){
- const r=U().fs[p],img=r.m&&r.m.startsWith('image'),lnk=isLnk(p);
- return[[isAmo(p)||lnk?'Run app':isHtml(p)?'Run in Comet':'Open',()=>openFn(p)],...(isAmo(p)?[['Add desktop shortcut',()=>{addShortcut(p);refreshAll()}]]:[]),...(isHtml(p)?[['Edit in Notes',()=>openApp('Notes',p)]]:[]),...(img?[['Set as desktop background',()=>setWall(p)]]:[]),...(r.t==='f'&&!lnk?[['Download',()=>download(base(p),r.d)]]:[]),'-',['Rename',()=>renItem(p)],['Delete',()=>delItem(p)]];
-}
-
-/* ================= Window manager ================= */
-let z=10,off=0;const running={};
-function openWin(app,title,w,h,fn){
- const el=document.createElement('div');el.className='win';off=(off+28)%140;
- el.style.cssText=`width:${w}px;height:${h+34}px;left:${40+off}px;top:${20+off}px;z-index:${++z}`;
- el.innerHTML=`<div class="tb">${app.img?`<img src="${app.img}" width="16" height="16" style="border-radius:3px">`:ic(app.i,16)}<span class="t">${esc(title)}</span><button class="mn">–</button><button class="mx">□</button><button class="x">✕</button></div><div class="bd"></div>`;
- $('#desk').appendChild(el);if(S().maxWin)el.classList.add('max');(running[app.n]=running[app.n]||[]).push(el);paintPins();
- const focus=()=>{el.style.zIndex=++z;paintPins()};el.onpointerdown=focus;
- $('.mn',el).onclick=()=>{el.style.display='none';paintPins()};
- $('.mx',el).onclick=()=>el.classList.toggle('max');
- $('.x',el).onclick=()=>{el.remove();running[app.n]=running[app.n].filter(x=>x!==el);paintPins()};
- const bar=$('.tb',el);let dx=0,dy=0,dr=false;
- bar.ondblclick=e=>{if(e.target.tagName!=='BUTTON')el.classList.toggle('max')};
- bar.oncontextmenu=e=>menu(e,[['Maximize / restore',()=>el.classList.toggle('max')],['Minimize',()=>$('.mn',el).click()],'-',['Close',()=>$('.x',el).click()]]);
- bar.onpointerdown=e=>{if(e.target.tagName==='BUTTON'||el.classList.contains('max'))return;dr=true;dx=e.clientX/zf()-el.offsetLeft;dy=e.clientY/zf()-el.offsetTop;bar.setPointerCapture(e.pointerId)};
- bar.onpointermove=e=>{if(dr){el.style.left=e.clientX/zf()-dx+'px';el.style.top=Math.max(0,e.clientY/zf()-dy)+'px'}};
- bar.onpointerup=()=>dr=false;
- beep();fn($('.bd',el),el);return el;
-}
-
-/* ================= Apps ================= */
-/* --- Files --- */
-function filesApp(b,start){
- let cwd=start||'/Documents',sel=null;
- const places=[['monitor','Desktop','/Desktop'],['doc','Documents','/Documents'],['image','Pictures','/Pictures'],['down','Downloads','/Downloads'],['app','Applications','/Applications'],['drive','This PC','/']];
- const openP=p=>{const r=U().fs[p];if(r.t==='d'){cwd=p;sel=null;draw()}else openFile(p)};
- const draw=()=>{
-  const fs=U().fs,items=Object.keys(fs).filter(p=>parent(p)===cwd).sort((a,c)=>(fs[c].t==='d')-(fs[a].t==='d')||a.localeCompare(c));
-  b.innerHTML=`<div class="fill"><div class="tl"><button data-a="up">Up</button><button data-a="nd">New folder</button><button data-a="nt">New file</button><button data-a="upl">Upload</button><span style="margin-left:auto;color:var(--dim)">${esc(cwd==='/'?'This PC':cwd.slice(1).replace(/\//g,' › '))}</span><input type="file" hidden></div>
-  <div style="flex:1;display:flex;min-height:0"><div class="side" style="width:160px;padding-top:8px;border-right:1px solid var(--bd)">${places.map(p=>`<div data-go="${p[2]}" class="${cwd===p[2]?'on':''}">${ic(p[0],18)}${p[1]}</div>`).join('')}</div>
-  <div class="grid" style="flex:1;overflow:auto;padding:10px;display:flex;flex-wrap:wrap;align-content:flex-start">${items.map(p=>`<div class="tile" data-p="${esc(p)}">${fileIcon(p,48)}${esc(label(p))}</div>`).join('')||'<p style="color:var(--dim)">This folder is empty.</p>'}</div></div>
-  <div style="padding:5px 12px;border-top:1px solid var(--bd);color:var(--dim);font-size:12px">${items.length} items</div></div>`;
-  const fi=$('input[type=file]',b),grid=$('.grid',b);
-  fi.onchange=()=>{const f=fi.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{if(put(join(cwd,f.name),{t:'f',m:f.type||'application/octet-stream',d:r.result}))refreshAll()};r.readAsDataURL(f)};
-  const pick=t=>{sel=t.dataset.p;b.querySelectorAll('.tile').forEach(x=>x.classList.toggle('sel',x===t))};
-  b.onclick=e=>{
-   const g=e.target.closest('[data-go]');if(g){cwd=g.dataset.go;sel=null;return draw()}
-   const t=e.target.closest('.tile');if(t){pick(t);dbl(t.dataset.p,()=>openP(t.dataset.p));return}
-   const a=e.target.dataset.a;
-   if(a==='up'){cwd=parent(cwd);sel=null;draw()}else if(a==='nd')newItem(cwd,'d');else if(a==='nt')newItem(cwd,'f');else if(a==='upl')fi.click();
-  };
-  grid.oncontextmenu=e=>{const t=e.target.closest('.tile');
-   if(t){pick(t);menu(e,itemMenu(t.dataset.p,openP))}
-   else menu(e,[['New folder',()=>newItem(cwd,'d')],['New text document',()=>newItem(cwd,'f')],['Upload a file',()=>fi.click()],'-',['Refresh',draw]])};
- };views.push({b,draw});draw();
-}
-/* --- Notes --- */
-function notesApp(b,p){
- b.innerHTML=`<div class="fill"><div class="tl"><input class="fp" style="flex:1;min-width:140px" value="${esc(p||'/Documents/Untitled.txt')}"><button class="pri sv">Save</button><button class="rn">Run</button><select class="op"><option value="">Open…</option>${Object.keys(U().fs).filter(k=>U().fs[k].m&&U().fs[k].m.startsWith('text')).map(k=>`<option>${esc(k)}</option>`).join('')}</select></div><textarea style="flex:1;border-radius:0;border:0;resize:none;background:#1a1a1a;font:14px Consolas,monospace"></textarea><div class="st" style="padding:4px 12px;font-size:12px;color:var(--dim)"></div></div>`;
- const ta=$('textarea',b),fp=$('.fp',b),st=$('.st',b);
- const cnt=()=>st.textContent=ta.value.length+' characters';
- const load=q=>{if(q&&U().fs[q]){ta.value=fromData(U().fs[q].d);fp.value=q}cnt()};load(p);ta.oninput=cnt;
- $('.op',b).onchange=e=>load(e.target.value);
- const doSave=()=>{let q=fp.value.trim();if(!q.startsWith('/'))q='/'+q;if(put(q,{t:'f',m:/\.html?$/i.test(q)?'text/html':'text/plain',d:toData(ta.value)})){toast('Saved '+q);refreshAll();return q}};
- $('.sv',b).onclick=doSave;$('.rn',b).onclick=()=>{const q=doSave();if(q&&/\.html?$/i.test(q))openApp('Comet',q);else if(q)toast('Name the file with .html to run it')};
-}
-/* --- Paint (Windows style: ribbon, tools, brushes, shapes, colors) --- */
-Object.assign(IC,{
- pencil:P('<path fill="#f59e0b" d="M34 5l9 9-24 24-12 3 3-12z"/><path fill="#fde68a" d="M34 5l9 9-5 5-9-9z"/><path fill="#374151" d="M7 41l3-12 9 9z"/>'),
- bucket:P('<path fill="#60a5fa" d="M8 26L24 10l16 16-12 12a4 4 0 0 1-6 0z"/><path fill="#38bdf8" d="M40 31c3 4 4 6 4 8a4 4 0 0 1-8 0c0-2 1-4 4-8z"/>'),
- text:P('<rect x="5" y="5" width="38" height="38" rx="6" fill="#6366f1"/><path fill="#fff" d="M14 14h20v5h-7v17h-6V19h-7z"/>'),
- eraser:P('<path fill="#f472b6" d="M28 6l14 14-16 18H14L6 30z"/><path fill="#f8fafc" d="M17 17l14 14-5 7H14L6 30z"/>'),
- picker:P('<path fill="#14b8a6" d="M37 5a5 5 0 0 1 6 6l-5 5-6-6zM30 12l6 6-18 18-8 2 2-8z"/>'),
- undo:P('<path fill="none" stroke="#e5e7eb" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" d="M14 18h16a9 9 0 0 1 0 18H18M14 18l7-7M14 18l7 7"/>'),
- redo:P('<path fill="none" stroke="#e5e7eb" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" d="M34 18H18a9 9 0 0 0 0 18h12M34 18l-7-7M34 18l-7 7"/>')
-});
-const PAL=['#000000','#7f7f7f','#880015','#ed1c24','#ff7f27','#fff200','#22b14c','#00a2e8','#3f48cc','#a349a4','#ffffff','#c3c3c3','#b97a57','#ffaec9','#ffc90e','#efe4b0','#b5e61d','#99d9ea','#7092be','#c8bfe7'];
-const SHAPES=[['line','Line','╱'],['rect','Rectangle','▭'],['round','Rounded rectangle','▢'],['ellipse','Oval','◯'],['tri','Triangle','△'],['rtri','Right triangle','◺'],['diamond','Diamond','◇'],['penta','Pentagon','⬠'],['hexa','Hexagon','⬡'],['star','Star','★'],['arrow','Arrow','➔']];
-const POLY={tri:[[.5,0],[1,1],[0,1]],rtri:[[0,0],[1,1],[0,1]],diamond:[[.5,0],[1,.5],[.5,1],[0,.5]],penta:[[.5,0],[1,.38],[.81,1],[.19,1],[0,.38]],hexa:[[.25,0],[.75,0],[1,.5],[.75,1],[.25,1],[0,.5]],arrow:[[0,.3],[.6,.3],[.6,0],[1,.5],[.6,1],[.6,.7],[0,.7]],star:Array.from({length:10},(_,i)=>{const r=i%2?.4:1,t=i*Math.PI/5;return[.5+.5*r*Math.sin(t),.5-.5*r*Math.cos(t)]})};
-const TN={pencil:'Pencil (1 px)',brush:'Brush',fill:'Fill with color',text:'Text',eraser:'Eraser',picker:'Color picker'};SHAPES.forEach(s=>TN[s[0]]=s[1]);
-function paintApp(b){
- let W=800,H=500,tool='pencil',brush='round',c1='#000000',c2='#ffffff',slot=1,size=4,fm=0,zoom=1,drawing=false,btn=0,start,last,und=[],red=[];
- const tb=(t,n,i)=>`<button data-tool="${t}" title="${n}">${ic(i,22)}</button>`;
- b.innerHTML=`<div class="fill" tabindex="0" style="outline:0">
- <div class="rb">
-  <div class="rg"><div class="rr"><button data-f="new">New</button><button data-f="open">Open</button><button class="pri" data-f="save">Save</button><button data-f="dl">Download</button></div><label>File</label></div>
-  <div class="rg"><div class="rr"><button data-f="undo" title="Undo (Ctrl+Z)">${ic('undo',18)}</button><button data-f="redo" title="Redo (Ctrl+Y)">${ic('redo',18)}</button></div><label>History</label></div>
-  <div class="rg"><div class="rr">${tb('pencil','Pencil (1 px)','pencil')}${tb('brush','Brush','brush')}${tb('fill','Fill with color','bucket')}${tb('text','Text','text')}${tb('eraser','Eraser','eraser')}${tb('picker','Color picker','picker')}</div><label>Tools</label></div>
-  <div class="rg"><select class="br"><option value="round">Brush</option><option value="calli">Calligraphy brush</option><option value="air">Airbrush</option><option value="oil">Oil brush</option><option value="crayon">Crayon</option><option value="marker">Marker</option><option value="nat">Natural pencil</option><option value="water">Watercolor brush</option></select><label>Brushes</label></div>
-  <div class="rg"><div class="rr" style="max-width:200px">${SHAPES.map(s=>`<button data-tool="${s[0]}" title="${s[1]}" style="width:30px;padding:3px 0;justify-content:center">${s[2]}</button>`).join('')}</div><select class="fm"><option value="0">Outline</option><option value="1">Outline and fill</option><option value="2">Solid fill</option></select><label>Shapes</label></div>
-  <div class="rg"><select class="sz2">${[1,2,3,4,6,8,12,16,24,32,48].map(n=>`<option ${n===4?'selected':''}>${n}</option>`).join('')}</select><label>Size (px)</label></div>
-  <div class="rg"><div class="rr" style="max-width:340px"><div><div class="sw s1 on" title="Color 1"></div></div><div><div class="sw s2" title="Color 2"></div></div><div class="pal">${PAL.map(c=>`<i data-c="${c}" style="background:${c}" title="${c}"></i>`).join('')}</div><div style="display:flex;flex-direction:column;gap:4px"><input class="hx" value="#000000" style="width:84px;padding:3px 6px" title="Hex color"><input type="color" class="cp" value="#000000" style="width:84px;height:24px;padding:0"></div></div><label>Colors (left click: color 1, right click: color 2)</label></div>
-  <div class="rg"><div class="rr"><select class="tf"><option>Segoe UI</option><option>Arial</option><option>Times New Roman</option><option>Courier New</option><option>Impact</option></select><select class="ts">${[12,16,20,28,36,48,72].map(n=>`<option ${n===28?'selected':''}>${n}</option>`).join('')}</select></div><label>Text font and size</label></div>
-  <div class="rg"><div class="rr"><button data-f="rot">Rotate</button><button data-f="fh">Flip H</button><button data-f="fv">Flip V</button><button data-f="rs">Resize</button></div><label>Image</label></div>
-  <div class="rg"><select class="zm"><option value=".25">25%</option><option value=".5">50%</option><option value="1" selected>100%</option><option value="2">200%</option><option value="3">300%</option></select><label>Zoom</label></div>
- </div>
- <div style="flex:1;overflow:auto;background:#12161d;padding:14px"><div class="cw" style="touch-action:none"><canvas class="cv"></canvas><canvas class="ov" style="cursor:crosshair"></canvas></div></div>
- <div class="stb"><span class="sp">0, 0 px</span><span class="dm"></span><span class="st"></span></div><input type="file" class="of" accept="image/*" hidden></div>`;
- const root=$('.fill',b),cv=$('.cv',b),ov=$('.ov',b),cw=$('.cw',b),g=cv.getContext('2d',{willReadFrequently:true}),o=ov.getContext('2d');
- const fit=()=>{cw.style.width=W*zoom+'px';cw.style.height=H*zoom+'px';[cv,ov].forEach(c=>{c.style.width=W*zoom+'px';c.style.height=H*zoom+'px'});$('.dm',b).textContent=W+' × '+H+' px'};
- const sizeTo=(w,h)=>{W=w;H=h;cv.width=ov.width=w;cv.height=ov.height=h;fit()};
- sizeTo(800,500);g.fillStyle='#fff';g.fillRect(0,0,W,H);
- /* ---- undo / redo ---- */
- const snap=()=>{und.push(g.getImageData(0,0,W,H));if(und.length>25)und.shift();red.length=0};
- const put2=im=>{if(im.width!==W||im.height!==H)sizeTo(im.width,im.height);g.putImageData(im,0,0)};
- const undo=()=>{if(!und.length)return;red.push(g.getImageData(0,0,W,H));put2(und.pop())};
- const redo=()=>{if(!red.length)return;und.push(g.getImageData(0,0,W,H));put2(red.pop())};
- /* ---- colors ---- */
- const setColor=hex=>{slot===1?c1=hex:c2=hex;$('.s1',b).style.background=c1;$('.s2',b).style.background=c2;$('.hx',b).value=hex;$('.cp',b).value=hex};
- $('.s1',b).style.background=c1;$('.s2',b).style.background=c2;
- const pickSlot=n=>{slot=n;$('.s1',b).classList.toggle('on',n===1);$('.s2',b).classList.toggle('on',n===2);$('.hx',b).value=$('.cp',b).value=n===1?c1:c2};
- $('.s1',b).onclick=()=>pickSlot(1);$('.s2',b).onclick=()=>pickSlot(2);
- const pal=$('.pal',b);
- pal.onclick=e=>{const c=e.target.dataset.c;if(c){c1=c;$('.s1',b).style.background=c;if(slot===1)$('.hx',b).value=$('.cp',b).value=c}};
- pal.oncontextmenu=e=>{e.preventDefault();e.stopPropagation();const c=e.target.dataset.c;if(c){c2=c;$('.s2',b).style.background=c;if(slot===2)$('.hx',b).value=$('.cp',b).value=c}};
- $('.hx',b).onchange=e=>{let v=e.target.value.trim();if(v[0]!=='#')v='#'+v;/^#[0-9a-f]{6}$/i.test(v)?setColor(v.toLowerCase()):toast('Enter a color like #ff8800')};
- $('.cp',b).oninput=e=>setColor(e.target.value);
- /* ---- options ---- */
- const setTool=t=>{tool=t;b.querySelectorAll('[data-tool]').forEach(x=>x.classList.toggle('on',x.dataset.tool===t));$('.st',b).textContent=TN[t]};setTool('pencil');
- $('.br',b).onchange=e=>{brush=e.target.value;setTool('brush')};
- $('.fm',b).onchange=e=>fm=+e.target.value;$('.sz2',b).onchange=e=>size=+e.target.value;
- $('.zm',b).onchange=e=>{zoom=+e.target.value;fit()};
- /* ---- drawing helpers ---- */
- const ln=(a,c)=>{g.beginPath();g.moveTo(a[0],a[1]);g.lineTo(c[0],c[1]);g.stroke()};
- const along=(a,c,st,fn)=>{const d=Math.hypot(c[0]-a[0],c[1]-a[1]),n=Math.max(1,Math.ceil(d/st));for(let i=0;i<=n;i++)fn(a[0]+(c[0]-a[0])*i/n,a[1]+(c[1]-a[1])*i/n)};
- const bres=(a,c,fn)=>{let x0=Math.round(a[0]),y0=Math.round(a[1]);const x1=Math.round(c[0]),y1=Math.round(c[1]),dx=Math.abs(x1-x0),dy=-Math.abs(y1-y0),sx=x0<x1?1:-1,sy=y0<y1?1:-1;let err=dx+dy;for(;;){fn(x0,y0);if(x0===x1&&y0===y1)break;const e2=2*err;if(e2>=dy){err+=dy;x0+=sx}if(e2<=dx){err+=dx;y0+=sy}}};
- function stroke(a,c,col){
-  g.save();g.strokeStyle=g.fillStyle=col;g.lineCap='round';g.lineJoin='round';const s=size;
-  if(tool==='pencil')bres(a,c,(x,y)=>g.fillRect(x,y,1,1)); // exactly 1 pixel wide
-  else if(tool==='eraser'){g.strokeStyle=c2;g.lineCap='square';g.lineWidth=Math.max(s,6);ln(a,c)}
-  else switch(brush){
-   case'round':g.lineWidth=s;ln(a,c);break;
-   case'calli':g.lineWidth=2;along(a,c,1,(x,y)=>{g.beginPath();g.moveTo(x-s/2,y+s/2);g.lineTo(x+s/2,y-s/2);g.stroke()});break;
-   case'air':along(a,c,3,(x,y)=>{for(let i=0;i<6;i++){const r=Math.random()*s*1.5,t=Math.random()*6.283;g.globalAlpha=.7;g.fillRect(x+Math.cos(t)*r,y+Math.sin(t)*r,1,1)}});break;
-   case'oil':g.globalAlpha=.55;g.lineWidth=s*1.6;ln(a,c);break;
-   case'crayon':along(a,c,2,(x,y)=>{for(let i=0;i<5;i++){if(Math.random()<.45)continue;const r=Math.random()*s,t=Math.random()*6.283;g.globalAlpha=.6;g.fillRect(x+Math.cos(t)*r,y+Math.sin(t)*r,2,2)}});break;
-   case'marker':g.globalAlpha=.65;g.lineCap='square';g.lineWidth=s*1.3;ln(a,c);break;
-   case'nat':g.globalAlpha=.8;g.lineWidth=Math.max(1,s/3);for(let i=0;i<3;i++){const j=()=>(Math.random()-.5)*s/2;ln([a[0]+j(),a[1]+j()],[c[0]+j(),c[1]+j()])}break;
-   case'water':g.globalAlpha=.1;g.lineWidth=s*2.2;for(let i=0;i<3;i++)ln(a,c);break;
-  }
-  g.restore();
- }
- function flood(x,y,hex){ // paint bucket (small tolerance so soft edges fill nicely)
-  const w=W,h=H,im=g.getImageData(0,0,w,h),d=im.data,v=new Uint8Array(w*h),r=parseInt(hex.slice(1,3),16),gg=parseInt(hex.slice(3,5),16),bb=parseInt(hex.slice(5,7),16),i0=(y*w+x)*4,tr=d[i0],tg=d[i0+1],tbl=d[i0+2],ta=d[i0+3];
-  const m=(xx,yy)=>{const k=yy*w+xx;if(v[k])return false;const i=k*4;return Math.abs(d[i]-tr)+Math.abs(d[i+1]-tg)+Math.abs(d[i+2]-tbl)+Math.abs(d[i+3]-ta)<40};
-  const st=[x,y];
-  while(st.length){let yy=st.pop(),xx=st.pop();while(xx>=0&&m(xx,yy))xx--;xx++;let up=false,dn=false;
-   while(xx<w&&m(xx,yy)){const k=yy*w+xx,i=k*4;v[k]=1;d[i]=r;d[i+1]=gg;d[i+2]=bb;d[i+3]=255;
-    if(yy>0){const t=m(xx,yy-1);if(t&&!up){st.push(xx,yy-1);up=true}else if(!t)up=false}
-    if(yy<h-1){const t=m(xx,yy+1);if(t&&!dn){st.push(xx,yy+1);dn=true}else if(!t)dn=false}
-    xx++}}
-  g.putImageData(im,0,0);
- }
- function shape(c,t,a,e2,shift){
-  let[x1,y1]=a,[x2,y2]=e2;
-  if(shift){if(t==='line'){const dx=x2-x1,dy=y2-y1,an=Math.round(Math.atan2(dy,dx)/(Math.PI/4))*Math.PI/4,L=Math.hypot(dx,dy);x2=x1+L*Math.cos(an);y2=y1+L*Math.sin(an)}else{const m=Math.max(Math.abs(x2-x1),Math.abs(y2-y1));x2=x1+m*(x2<x1?-1:1);y2=y1+m*(y2<y1?-1:1)}}
-  const out=btn===2?c2:c1,fl=btn===2?c1:c2,x=Math.min(x1,x2),y=Math.min(y1,y2),w=Math.abs(x2-x1),h=Math.abs(y2-y1);
-  c.save();c.lineWidth=size;c.lineJoin='round';c.lineCap='round';c.strokeStyle=out;c.fillStyle=fm===2?out:fl;c.beginPath();
-  if(t==='line'){c.moveTo(x1,y1);c.lineTo(x2,y2)}
-  else if(t==='rect')c.rect(x,y,w,h);
-  else if(t==='round'){c.roundRect?c.roundRect(x,y,w,h,Math.min(w,h)/5):c.rect(x,y,w,h)}
-  else if(t==='ellipse')c.ellipse(x+w/2,y+h/2,w/2,h/2,0,0,7);
-  else{POLY[t].forEach((p,i)=>c[i?'lineTo':'moveTo'](x+p[0]*w,y+p[1]*h));c.closePath()}
-  if(t!=='line'&&fm>0)c.fill();if(t==='line'||fm!==2)c.stroke();c.restore();
- }
- function textAt(x,y){ // type directly on the canvas, Enter to place
-  const fam=$('.tf',b).value,ts=+$('.ts',b).value,col=c1,i=document.createElement('input');
-  i.style.cssText=`position:absolute;left:${x*zoom}px;top:${y*zoom}px;font:${ts*zoom}px "${fam}";color:${col};background:transparent;border:1px dashed #4cc2ff;border-radius:0;padding:0;min-width:80px;outline:0;z-index:3`;
-  cw.appendChild(i);setTimeout(()=>i.focus(),0);let done=false;
-  const fin=ok=>{if(done)return;done=true;if(ok&&i.value){snap();g.save();g.font=`${ts}px "${fam}"`;g.textBaseline='top';g.fillStyle=col;g.fillText(i.value,x,y);g.restore()}i.remove()};
-  i.onkeydown=e=>{e.stopPropagation();if(e.key==='Enter')fin(true);if(e.key==='Escape')fin(false)};i.onblur=()=>fin(true);
- }
- /* ---- pointer input on the canvas ---- */
- const pos=e=>{const r=cv.getBoundingClientRect();return[(e.clientX-r.left)*W/r.width,(e.clientY-r.top)*H/r.height]};
- const isShape=t=>!!POLY[t]||['line','rect','round','ellipse'].includes(t);
- ov.onpointerdown=e=>{
-  if(e.button===1)return;root.focus();btn=e.button;const p=pos(e),col=btn===2?c2:c1;start=last=p;
-  if(tool==='text'){if(btn===0)textAt(Math.round(p[0]),Math.round(p[1]));return}
-  ov.setPointerCapture(e.pointerId);
-  if(tool==='fill'){snap();flood(Math.max(0,Math.min(W-1,Math.floor(p[0]))),Math.max(0,Math.min(H-1,Math.floor(p[1]))),col);return}
-  if(tool==='picker'){const d=g.getImageData(Math.floor(p[0]),Math.floor(p[1]),1,1).data,hx='#'+[d[0],d[1],d[2]].map(n=>n.toString(16).padStart(2,'0')).join('');if(btn===2){c2=hx;$('.s2',b).style.background=hx}else{c1=hx;$('.s1',b).style.background=hx}pickSlot(slot);return}
-  snap();drawing=true;if(!isShape(tool))stroke(p,p,col);
- };
- ov.onpointermove=e=>{const p=pos(e);$('.sp',b).textContent=Math.round(p[0])+', '+Math.round(p[1])+' px';if(!drawing)return;
-  if(isShape(tool)){o.clearRect(0,0,W,H);shape(o,tool,start,p,e.shiftKey)}else{stroke(last,p,btn===2?c2:c1);last=p}};
- ov.onpointerup=e=>{if(!drawing)return;drawing=false;if(isShape(tool)){o.clearRect(0,0,W,H);shape(g,tool,start,pos(e),e.shiftKey)}};
- ov.oncontextmenu=e=>{e.preventDefault();e.stopPropagation()};
- root.onkeydown=e=>{if(e.ctrlKey&&e.key==='z'){e.preventDefault();undo()}if(e.ctrlKey&&e.key==='y'){e.preventDefault();redo()}};
- /* ---- ribbon buttons ---- */
- const copy=()=>{const t=document.createElement('canvas');t.width=W;t.height=H;t.getContext('2d').drawImage(cv,0,0);return t};
- const act=async f=>{
-  if(f==='undo')undo();else if(f==='redo')redo();
-  else if(f==='new'){snap();g.fillStyle='#fff';g.fillRect(0,0,W,H)}
-  else if(f==='open')$('.of',b).click();
-  else if(f==='save'){const n=await ask('File name','Untitled');if(n&&put('/Pictures/'+n.replace(/\.png$/i,'')+'.png',{t:'f',m:'image/png',d:cv.toDataURL()})){toast('Saved to Pictures');refreshAll()}}
-  else if(f==='dl')download('Untitled.png',cv.toDataURL());
-  else if(f==='rot'){const t=copy(),w=W,h=H;snap();sizeTo(h,w);g.save();g.translate(h,0);g.rotate(Math.PI/2);g.drawImage(t,0,0);g.restore()}
-  else if(f==='fh'||f==='fv'){const t=copy();snap();g.save();g.clearRect(0,0,W,H);f==='fh'?(g.translate(W,0),g.scale(-1,1)):(g.translate(0,H),g.scale(1,-1));g.drawImage(t,0,0);g.restore()}
-  else if(f==='rs'){const v=await ask('New size (width x height)',W+'x'+H),m=v&&v.match(/(\d+)\s*[x×]\s*(\d+)/i);if(!m)return;const t=copy();snap();sizeTo(Math.min(2400,+m[1]||W),Math.min(2400,+m[2]||H));g.fillStyle='#fff';g.fillRect(0,0,W,H);g.drawImage(t,0,0)}
- };
- b.onclick=e=>{const t=e.target.closest('[data-tool]');if(t)return setTool(t.dataset.tool);const f=e.target.closest('[data-f]');if(f)act(f.dataset.f)};
- $('.of',b).onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f)return;const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{snap();sizeTo(Math.min(2400,im.width),Math.min(2400,im.height));g.fillStyle='#fff';g.fillRect(0,0,W,H);g.drawImage(im,0,0)};im.src=r.result};r.readAsDataURL(f)};
-}
-/* --- Comet (web browser): tabs, history, bookmarks --- */
-const BR=()=>U().browser=U().browser||{history:[],bookmarks:[]};
-const hostOf=u=>{try{return new URL(u).hostname.replace(/^www\./,'')}catch(e){return u}};
-function startPage(){ // new tab page; clicks are sent to the browser with postMessage
- const bm=BR().bookmarks.slice(0,12).map(x=>`<a href="#" data-u="${esc(x.url)}">${esc((x.title||hostOf(x.url)).slice(0,22))}</a>`).join('')||'<p style="opacity:.6">Bookmarks you add show up here</p>';
- return `<!doctype html><body style="margin:0;font-family:Segoe UI,sans-serif;background:linear-gradient(#10244d,#0a1330);color:#fff;text-align:center"><style>a{color:#fff;text-decoration:none;background:#ffffff1c;padding:12px 18px;border-radius:10px;display:inline-block;margin:5px}</style><div style="padding-top:12vh"><div style="font-size:46px;font-weight:300">Comet</div><form id="f"><input id="q" placeholder="Search or type an address" style="margin:22px;width:70%;max-width:460px;padding:12px 18px;border-radius:24px;border:0;font-size:16px"></form><div>${bm}</div></div><script>document.getElementById('f').onsubmit=function(e){e.preventDefault();parent.postMessage({comet:document.getElementById('q').value},'*')};document.body.onclick=function(e){var a=e.target.closest('a');if(a){e.preventDefault();parent.postMessage({comet:a.dataset.u},'*')}};<\/script></body>`;
-}
-
-/* ----- Search engines for the address bar (Settings > Browser) -----
-   Google and DuckDuckGo use their light pages because the page fetcher cannot run heavy scripts. */
-const ENGINES={
- google:['Google (default)','https://www.google.com/search?q={q}&gbv=1'],
- bing:['Bing','https://www.bing.com/search?q={q}'],
- ddg:['DuckDuckGo','https://html.duckduckgo.com/html/?q={q}'],
- yahoo:['Yahoo','https://search.yahoo.com/search?p={q}'],
- wiki:['Wikipedia','https://en.wikipedia.org/w/index.php?search={q}']
-};
-const engineUrl=q=>(ENGINES[S().engine]||ENGINES.google)[1].replace('{q}',encodeURIComponent(q));
-
-/* ----- How Comet loads a page -----
-   SBX_FULL: normal frame rules (used for saved .html files and direct loads).
-   SBX_SAFE: no allow-same-origin, so a page that came through the fetcher can NEVER read the OS files or accounts. */
-const SBX_FULL='allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-pointer-lock';
-const SBX_SAFE='allow-scripts allow-forms allow-popups allow-modals allow-pointer-lock';
-let fetcherTip=false;
-
-/* This small script is put inside every fetched page. It sends link clicks and searches
-   back to Comet, so the next page also loads through the fetcher. */
-const NAV_SCRIPT='('+function(){
- var send=function(u,nt){parent.postMessage({comet:u,nt:!!nt},'*')};
- document.addEventListener('click',function(e){
-  var a=e.target.closest&&e.target.closest('a[href]');
-  if(!a||e.defaultPrevented||e.button||e.ctrlKey||e.metaKey)return;
-  var h=a.href;if(!/^https?:/i.test(h)||a.hasAttribute('download'))return;
-  if(h.indexOf('#')>-1&&h.split('#')[0]===document.baseURI.split('#')[0]){ // jump inside the same page
-   e.preventDefault();var id=decodeURIComponent(h.split('#')[1]),el=document.getElementById(id)||document.getElementsByName(id)[0];if(el)el.scrollIntoView();return}
-  e.preventDefault();send(h,a.target==='_blank');
- },true);
- document.addEventListener('submit',function(e){ // searches and other GET forms
-  var f=e.target;if(!f||(f.method||'get').toLowerCase()!=='get'||e.defaultPrevented)return;
-  e.preventDefault();var u=new URL(f.getAttribute('action')||document.baseURI,document.baseURI);
-  new FormData(f).forEach(function(v,k){if(typeof v==='string')u.searchParams.set(k,v)});send(u.href,false);
- },true);
-}+')()';
-function injectNav(html,baseUrl){ // adds <base> so images and styles find their home, plus the nav script
- html=html.replace(/<meta[^>]+http-equiv=["']?content-security-policy["']?[^>]*>/gi,''); // site rules would block our script
- const add='<base href="'+esc(baseUrl)+'"><meta name="referrer" content="no-referrer"><script>'+NAV_SCRIPT+'<'+'/script>';
- return /<head[^>]*>/i.test(html)?html.replace(/<head[^>]*>/i,m=>m+add):add+html;
-}
-function msgPage(title,u,detail){ // loading and error screens shown inside a tab
- return '<!doctype html><body style="margin:0;font-family:Segoe UI,sans-serif;background:#1f1f1f;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;text-align:center"><div style="max-width:420px;padding:20px"><h2 style="font-weight:400">'+esc(title)+'</h2><p style="opacity:.7;word-break:break-all">'+esc(u)+'</p>'+(detail?'<p style="opacity:.85">'+esc(detail)+'</p><a target="_blank" style="color:#4cc2ff" href="'+esc(u)+'">Open in a real browser tab</a>':'')+'</div></body>';
-}
-function browserApp(b,file){
- const T=[];let cur=null,mode='';
- b.innerHTML=`<div class="fill"><div class="tabs"></div>
-  <div class="tl"><button data-a="back">‹</button><button data-a="fwd">›</button><button data-a="rl">↻</button><input class="u" style="flex:1;border-radius:16px;min-width:100px" placeholder="Search or enter address"><button data-a="star" title="Bookmark this page">☆</button><button class="pri" data-a="go">Go</button><button data-a="ext" title="Open in a real browser tab">↗</button><button data-a="panel">History</button></div>
-  <div class="bmbar"></div>
-  <div style="flex:1;display:flex;min-height:0"><div class="views" style="flex:1;position:relative"></div><div class="bp" style="width:280px;display:none;border-left:1px solid var(--bd);overflow:auto;padding:8px"></div></div></div>`;
- const A=$('.u',b);
- const toUrl=v=>{v=v.trim();if(/^https?:\/\//i.test(v))return v;if(v.includes('.')&&!v.includes(' '))return 'https://'+v;return engineUrl(v)};
- const isBm=u=>BR().bookmarks.some(x=>x.url===u);
- function strip(){$('.tabs',b).innerHTML=T.map((t,i)=>`<div class="tab ${t===cur?'on':''}" data-i="${i}"><span>${esc(t.title||'New tab')}</span><span data-x="${i}" style="opacity:.6">✕</span></div>`).join('')+'<button data-a="nt" style="padding:2px 10px;margin-bottom:4px">+</button>'}
- function bar(){const bm=BR().bookmarks.slice(0,14),el=$('.bmbar',b);el.style.display=bm.length?'flex':'none';el.innerHTML=bm.map(x=>`<button class="bmk" data-u="${esc(x.url)}">${esc((x.title||hostOf(x.url)).slice(0,18))}</button>`).join('')}
- function panel(){
-  const p=$('.bp',b);p.style.display=mode?'block':'none';if(!mode)return;
-  const list=mode==='bookmarks'?BR().bookmarks:BR().history;
-  p.innerHTML=`<div class="row"><button data-m="history" class="${mode==='history'?'on':''}">History</button><button data-m="bookmarks" class="${mode==='bookmarks'?'on':''}">Bookmarks</button></div><div class="row">${mode==='history'?'<button data-a="clr">Clear history</button>':'<button data-a="imp">Import</button><button data-a="exp">Export</button>'}</div>${list.slice(0,300).map(x=>`<div class="hi" data-u="${esc(x.url)}"><div>${esc(x.title||hostOf(x.url))}</div><small>${esc(x.url.slice(0,70))}</small></div>`).join('')||'<p style="color:var(--dim)">Nothing here yet.</p>'}<input type="file" class="bf" accept=".html,.htm" hidden>`;
- }
- function sync(){A.value=cur?cur.url:'';$('[data-a=star]',b).textContent=cur&&isBm(cur.url)?'★':'☆';strip();bar();panel()}
- function pick(t){cur=t;T.forEach(x=>x.el.style.display=x===t?'block':'none');sync()}
-
- /* Loads a web address. With a page fetcher set (a Supabase edge function) the SERVER downloads the page
-    and the tab shows it, so sites that refuse to be framed still open. Without one, we fall back to a plain frame. */
- async function loadPage(t,u){
-  const s=S(),n=t.req=(t.req||0)+1,el=t.el;
-  if(!s.edgeUrl){
-   el.setAttribute('sandbox',SBX_FULL);el.removeAttribute('srcdoc');
-   el.src=s.proxy?s.proxy.replace('{url}',encodeURIComponent(u)):u;
-   if(!fetcherTip){fetcherTip=true;toast('Tip: add your page fetcher in Settings > Browser so every site can open.')}
-   return;
-  }
-  el.setAttribute('sandbox',SBX_SAFE);el.removeAttribute('src');el.srcdoc=msgPage('Loading…',u);
-  try{
-   const key=s.edgeKey,ac=new AbortController(),to=setTimeout(()=>ac.abort(),25000); // give up after 25 seconds
-   const r=await fetch(s.edgeUrl+(s.edgeUrl.includes('?')?'&':'?')+'url='+encodeURIComponent(u),{signal:ac.signal,headers:key?{apikey:key,Authorization:'Bearer '+key}:{}});
-   if(t.req!==n){clearTimeout(to);return} // a newer click already replaced this load
-   if(!r.ok){clearTimeout(to);let m='The page fetcher answered with error '+r.status+'.';try{const j=await r.json();if(j.error)m=j.error}catch(e){}throw new Error(m)}
-   const fin=r.headers.get('x-final-url')||u,up=(r.headers.get('x-upstream-type')||'').toLowerCase(),ct=(r.headers.get('content-type')||'').toLowerCase();
-   const buf=await r.arrayBuffer();clearTimeout(to);if(t.req!==n)return;
-   // Supabase turns text/html answers into text/plain, so the real type comes in x-upstream-type.
-   // An older fetcher without that header: look at the start of the text to spot a web page.
-   const head=new TextDecoder().decode(buf.slice(0,800));
-   const isHtml=/text\/html|application\/xhtml/.test(up||ct)||(!up&&/text\/plain/.test(ct)&&/^\s*(<!doctype html|<html|<head|<body)/i.test(head));
-   if(isHtml){
-    let enc='utf-8';const cs=(up||ct).match(/charset=([\w-]+)/i);if(cs)enc=cs[1];
-    let html;try{html=new TextDecoder(enc).decode(buf)}catch(e){html=new TextDecoder().decode(buf)}
-    const m=html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);if(m)t.title=m[1].replace(/\s+/g,' ').trim().slice(0,60)||t.title;
-    el.srcdoc=injectNav(html,fin);
-   }else{ // images, PDFs, plain text and so on
-    const type=up||(/text\/plain/.test(ct)?'text/plain':ct);
-    el.removeAttribute('srcdoc');el.src=URL.createObjectURL(new Blob([buf],{type}));
-   }
-   if(t===cur){if(fin!==u)A.value=fin;sync()}else strip();
-  }catch(err){if(t.req!==n)return;el.srcdoc=msgPage('This page couldn’t be loaded',u,err.name==='AbortError'?'The page fetcher took too long to answer.':err.message)}
- }
- function go(t,v,f,keep){ // load an address, a saved html file, or the start page
-  let u='';
-  if(f){t.el.setAttribute('sandbox',SBX_FULL);t.el.removeAttribute('src');t.el.srcdoc=textOf(U().fs[f].d);t.title=base(f)}
-  else if(!v||!v.trim()){t.el.setAttribute('sandbox',SBX_SAFE);t.el.removeAttribute('src');t.el.srcdoc=startPage();t.title='New tab'}
-  else{u=toUrl(v);t.title=hostOf(u);loadPage(t,u);
-   if(!keep){const h=BR().history;if(!h.length||h[0].url!==u){h.unshift({url:u,title:t.title,t:Date.now()});h.length=Math.min(h.length,500);persist()}}}
-  t.url=u;if(!keep&&!f){t.hist=t.hist.slice(0,t.i+1);t.hist.push(u);t.i=t.hist.length-1}
-  if(t===cur)sync();else strip();
- }
- function newTab(v,f){
-  const el=document.createElement('iframe');el.style.cssText='position:absolute;inset:0;width:100%;height:100%;border:0;background:#fff';
-  el.setAttribute('sandbox',SBX_FULL);el.setAttribute('allow','autoplay;fullscreen;clipboard-write');
-  $('.views',b).appendChild(el);const t={el,url:'',title:'New tab',hist:[],i:-1};T.push(t);pick(t);go(t,v||'',f);
- }
- const close=i=>{const t=T[i];t.el.remove();T.splice(i,1);if(!T.length)return newTab('');pick(cur===t?T[Math.max(0,i-1)]:cur)};
- const nav=d=>{const j=cur.i+d;if(j<0||j>=cur.hist.length)return;cur.i=j;go(cur,cur.hist[j],null,true)};
- b.onclick=async e=>{
-  const x=e.target.closest('[data-x]');if(x)return close(+x.dataset.x);
-  const tb=e.target.closest('.tab');if(tb)return pick(T[+tb.dataset.i]);
-  const m=e.target.closest('[data-m]');if(m){mode=m.dataset.m;return panel()}
-  const h=e.target.closest('.hi,.bmk');if(h)return go(cur,h.dataset.u);
-  const a=(e.target.closest('[data-a]')||{dataset:{}}).dataset.a;
-  if(a==='nt')newTab('');else if(a==='back')nav(-1);else if(a==='fwd')nav(1);
-  else if(a==='rl'){if(cur.url)go(cur,cur.url,null,true)}
-  else if(a==='go')go(cur,A.value);
-  else if(a==='ext'){if(cur.url)window.open(cur.url,'_blank')}
-  else if(a==='panel'){mode=mode?'':'history';panel()}
-  else if(a==='star'){if(!cur.url)return toast('Open a page first');const bm=BR().bookmarks,i=bm.findIndex(y=>y.url===cur.url);i>=0?bm.splice(i,1):bm.unshift({url:cur.url,title:cur.title});persist();sync()}
-  else if(a==='clr'){BR().history=[];persist();panel()}
-  else if(a==='imp')$('.bf',b).click();
-  else if(a==='exp'){const rows=BR().bookmarks.map(y=>`<DT><A HREF="${esc(y.url)}">${esc(y.title||y.url)}</A>`).join('\n');download('bookmarks.html','data:text/html;charset=utf-8,'+encodeURIComponent('<!DOCTYPE NETSCAPE-Bookmark-file-1>\n<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">\n<TITLE>Bookmarks</TITLE>\n<H1>Bookmarks</H1>\n<DL><p>\n'+rows+'\n</DL>'))}
- };
- b.onchange=async e=>{ // import a bookmarks .html exported from Chrome, Edge, Firefox or Safari
-  if(!e.target.classList.contains('bf'))return;const f=e.target.files[0];e.target.value='';if(!f)return;
-  const doc=new DOMParser().parseFromString(await f.text(),'text/html'),bm=BR().bookmarks;let n=0;
-  doc.querySelectorAll('a[href]').forEach(a=>{const u=a.getAttribute('href');if(/^https?:\/\//i.test(u)&&!bm.some(y=>y.url===u)){bm.push({url:u,title:(a.textContent||'').trim()});n++}});
-  persist();sync();toast(n?'Imported '+n+' bookmarks':'No new bookmarks were found');
- };
- b.oncontextmenu=e=>{
-  const h=e.target.closest('.hi,.bmk');if(!h)return;const u=h.dataset.u,isB=h.classList.contains('bmk')||mode==='bookmarks';
-  menu(e,[['Open in new tab',()=>newTab(u)],[isB?'Remove bookmark':'Remove from history',()=>{if(isB)BR().bookmarks=BR().bookmarks.filter(y=>y.url!==u);else BR().history=BR().history.filter(y=>y.url!==u);persist();sync()}]]);
- };
- A.onkeydown=e=>{if(e.key==='Enter')go(cur,A.value)};
- const onMsg=e=>{if(!b.isConnected){removeEventListener('message',onMsg);return}const t=T.find(x=>x.el.contentWindow===e.source);if(t&&e.data&&e.data.comet!=null){if(e.data.nt)newTab(String(e.data.comet));else go(t,String(e.data.comet))}};
- addEventListener('message',onMsg);
- newTab('',file);
-}
-
-/* ================= App bridge =================
-   An app (like the App Builder) can hand the OS a finished .amo package.
-   Only frames opened by amoRun (they carry data-amo) are allowed to ask, and the user must say yes. */
-addEventListener('message',async e=>{
- const d=e.data;if(!me||!d||typeof d!=='object'||!d.amoInstall)return;
- if(![...document.querySelectorAll('iframe[data-amo]')].some(f=>f.contentWindow===e.source))return;
- let ok=false;
- try{
-  const o=JSON.parse(d.amoInstall);if(o.amo!==1||!o.files)throw 0;const nm=String(o.name||d.name||'App');
-  if(await ask('An app wants to install “'+esc(nm)+'”. Add it to this PC?',null)){ok=!!installAmo(d.amoInstall,nm,true);if(ok)toast(nm+' was installed and added to the desktop')}
- }catch(err){toast('That app package couldn’t be installed.')}
- try{e.source.postMessage({amoInstalled:ok},'*')}catch(err){}
-});
-
-/* ================= Software update =================
-   1. checkUpdate asks GitHub for the latest release of OS_REPO.
-   2. If it is newer, a notification appears (and Settings > Update shows the button).
-   3. installUpdate downloads that release's AmogOs html and saves the release url, tag and a copy in localStorage.
-   4. On the next start, the patch loader (top of this file) finds the url in localStorage and swaps the whole page for it.
-   The PKG, EXE and APK all load this same html file, so they get the same update feature. */
-const verParts=v=>String(v).replace(/^v/i,'').split('.').map(n=>parseInt(n,10)||0);
-const isNewer=(a,b)=>{const x=verParts(a),y=verParts(b);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0}return false};
-let upd=null; // newest release we know about: {tag,notes,url,api,isNew}
-async function checkUpdate(silent){
- try{
-  const r=await fetch('https://api.github.com/repos/'+OS_REPO+'/releases/latest',{headers:{Accept:'application/vnd.github+json'}});
-  if(!r.ok)throw 0;const j=await r.json(),as=j.assets||[];
-  const a=as.find(x=>/amogos.*\.html?$/i.test(x.name))||as.find(x=>/\.html?$/i.test(x.name));
-  upd={tag:String(j.tag_name).replace(/^v/i,''),notes:j.body||'',size:a?a.size:0,api:a?a.url:'',url:a?a.browser_download_url:'https://github.com/'+OS_REPO+'/releases/download/'+j.tag_name+'/AmogOs.html'};
-  upd.isNew=isNewer(upd.tag,OS_VERSION)&&localStorage.getItem('amogos.badTag')!==upd.tag; // badTag: a release whose file had the wrong version
-  if(upd.isNew&&silent)showUpdateNotice();
-  return upd;
- }catch(e){if(!silent)toast('Couldn’t check for updates. Check your internet connection.');return null}
-}
-// How long is left? Shown as "less than a second" or "about N seconds"
-const eta=n=>n<=1?'less than a second':'about '+Math.ceil(n)+' seconds';
-// Reload the whole OS. If the OS runs inside the update frame, reload the outer page so the new start is clean.
-function restartOS(){try{(window.top||window).location.reload()}catch(e){location.reload()}}
-async function readText(r,total,onProg){ // reads the download piece by piece so we can show progress
- if(!onProg||!r.body||!r.body.getReader)return r.text();
- const rd=r.body.getReader(),dec=new TextDecoder();let got=0,out='';
- for(;;){const x=await rd.read();if(x.done)break;got+=x.value.length;out+=dec.decode(x.value,{stream:true});onProg(got,total||+r.headers.get('content-length')||0)}
- return out+dec.decode();
-}
-async function downloadRelease(u,onProg){ // tries three ways, because GitHub download links do not allow direct browser requests
- const tries=[];
- if(u.api)tries.push(()=>fetch(u.api,{headers:{Accept:'application/octet-stream'}}));
- if(S().edgeUrl)tries.push(()=>fetch(S().edgeUrl+(S().edgeUrl.includes('?')?'&':'?')+'url='+encodeURIComponent(u.url),{headers:S().edgeKey?{apikey:S().edgeKey,Authorization:'Bearer '+S().edgeKey}:{}}));
- tries.push(()=>fetch(u.url));
- for(const t of tries){
-  try{const r=await t();if(!r.ok)continue;const code=await readText(r,u.size,onProg);if(/<html/i.test(code)&&/amogos/i.test(code)&&code.length>20000)return code}catch(e){}
- }
- throw new Error('download failed');
-}
-// ----- Where an installed update is saved -----
-// The update file can be very large, so it goes in the browser cache (no 5 MB limit), with IndexedDB as the backup.
-// localStorage only keeps the small notes: release url, version, and which place holds the copy.
-const PATCH_CK='amogos-update',PATCH_URL='https://amogos.invalid/patch';
-const patchIdb=()=>new Promise((ok,no)=>{const r=indexedDB.open('amogos-update',1);r.onupgradeneeded=()=>r.result.createObjectStore('p');r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error)});
-async function patchSave(code){
- localStorage.removeItem('amogos.patchCode'); // an old-style copy would just waste space
- try{
-  if(window.caches){const c=await caches.open(PATCH_CK);await c.put(PATCH_URL,new Response(code,{headers:{'Content-Type':'text/html'}}));localStorage.setItem('amogos.patchStore','cache');return}
- }catch(e){}
- try{
-  const db=await patchIdb();
-  await new Promise((ok,no)=>{const t=db.transaction('p','readwrite');t.objectStore('p').put(code,'code');t.oncomplete=ok;t.onerror=()=>no(t.error)});
-  db.close();localStorage.setItem('amogos.patchStore','idb');return;
- }catch(e){}
- throw new Error('storage');
-}
-async function patchClear(){try{await caches.delete(PATCH_CK)}catch(e){}try{indexedDB.deleteDatabase('amogos-update')}catch(e){}}
-async function installUpdate(onProg){ // saves the release url + code; the patch loader uses them on the next start
- if(!upd)throw new Error('no update');
- const code=await downloadRelease(upd,onProg);
- // Trust the version written INSIDE the file, not the release name. If it is not newer than ours, installing it would just loop.
- const m=code.match(/name="amogos-version"\s+content="([^"]+)"/)||code.match(/OS_VERSION='([\d.]+)'/),fileVer=m?m[1]:'';
- if(!fileVer||!isNewer(fileVer,OS_VERSION)){localStorage.setItem('amogos.badTag',upd.tag);throw new Error('stale:'+(fileVer||'unknown'))}
- await patchSave(code); // browser cache or IndexedDB, never localStorage
- localStorage.setItem('amogos.releaseUrl',upd.url);
- localStorage.setItem('amogos.releaseTag',fileVer);
- localStorage.removeItem('amogos.boot');
-}
-async function resetPatch(){['amogos.releaseUrl','amogos.releaseTag','amogos.patchCode','amogos.patchStore','amogos.boot'].forEach(k=>localStorage.removeItem(k));await patchClear()}
-function showUpdateNotice(){ // small card in the top right corner
- if(!upd||$('#unote')||sessionStorage.getItem('amogos.skip')===upd.tag||localStorage.getItem('amogos.releaseTag')===upd.tag)return;
- const n=document.createElement('div');n.id='unote';n.className='unote';
- n.innerHTML='<b>Software update available</b><div style="color:var(--dim);margin:4px 0 10px">AmogOs '+esc(upd.tag)+' is ready. You are on '+esc(OS_VERSION)+'.</div><div style="display:flex;gap:8px"><button class="pri" data-a="go">Update now</button><button data-a="x">Later</button></div>';
- n.onclick=e=>{const a=e.target.dataset.a;if(!a)return;n.remove();if(a==='x')sessionStorage.setItem('amogos.skip',upd.tag);else openApp('Settings','Update')};
- document.body.appendChild(n);
-}
-function bindUpdate(pg){ // wires up the buttons on Settings > Update
- const us=$('#us',pg),uc=$('#uc',pg),ui=$('#ui',pg),uk=$('#uk',pg),ubw=$('#ubw',pg),ub=$('#ub',pg),waiting=localStorage.getItem('amogos.releaseTag');
- const bar=f=>{ubw.hidden=f==null;if(f!=null)ub.style.width=Math.round(f*100)+'%'};
- const paint=u=>{
-  if(waiting&&isNewer(waiting,OS_VERSION)){us.textContent='Version '+waiting+' is installed. Restart AmogOs to start using it.';ui.hidden=true;return}
-  if(!u){us.textContent='Press “Check for updates” to see if a new version is out.';ui.hidden=true;return}
-  us.innerHTML=u.isNew?'Version <b>'+esc(u.tag)+'</b> is available.'+(u.notes?'<div style="margin-top:6px;white-space:pre-wrap;max-height:120px;overflow:auto">'+esc(u.notes)+'</div>':''):'You have the newest version.';
-  ui.hidden=!u.isNew;
- };
- uc.onclick=async()=>{us.textContent='Checking…';paint(await checkUpdate(false))};
- ui.onclick=async()=>{
-  ui.disabled=uc.disabled=true;const t0=Date.now();bar(0);
-  const prog=(got,total)=>{ // progress while downloading
-   const f=total?Math.min(1,got/total):0,el=(Date.now()-t0)/1000;
-   bar(f);us.textContent='Downloading update… '+Math.round(f*100)+'%'+(f>.02?' ('+eta(el/f-el)+' left)':'');
-  };
-  try{
-   await installUpdate(prog);bar(1);
-   // Countdown to the restart. Starting the new version takes about 6 more seconds after that.
-   let n=5,stop=false;uk.hidden=false;
-   uk.onclick=()=>{stop=true;uk.hidden=true;bar(null);us.textContent='The update is installed. It will finish the next time you start AmogOs.'};
-   const tick=()=>{
-    if(stop)return;
-    if(n<=0){uk.hidden=true;us.textContent='Restarting…';persist();setTimeout(restartOS,300);return}
-    us.textContent='Update downloaded. Restarting in '+n+' second'+(n===1?'':'s')+'. The update will be complete in about '+(n+6)+' seconds.';
-    n--;setTimeout(tick,1000);
-   };
-   tick();
-  }catch(e){bar(null);ui.disabled=uc.disabled=false;
-   if(/^stale:/.test(e.message)){ui.hidden=true;us.textContent='This release is named '+(upd?upd.tag:'')+' but the AmogOs.html inside it says version '+e.message.slice(6)+', which is not newer than yours ('+OS_VERSION+'). The version number inside the file needs to match the release.'}
-   else if(e.message==='storage')us.textContent='There is not enough free space in this browser to save the update. Free some space and try again.'
-   else us.textContent='The download failed. Try again in a minute.'}
- };
- $('#ur',pg).onclick=async()=>{if(await ask('Remove the installed update and go back to the built-in version?',null)){await resetPatch();restartOS()}};
- paint(upd);if(!upd)checkUpdate(false).then(paint);
-}
-/* --- App Store: install .amo apps into the Applications folder and onto the desktop --- */
-const BI=svg=>'data:image/svg+xml;base64,'+btoa(svg);
-const STORE_APPS=[
- {id:'pop-dash',name:'Pop Dash',desc:'A Geometry Dash style rhythm platformer by FallGameDev.',size:'8 MB',url:STORE_RAW+'pop-dash.amo',icon:BI('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7c3aed"/><stop offset="1" stop-color="#ec4899"/></linearGradient></defs><rect x="2" y="2" width="44" height="44" rx="11" fill="url(#g)"/><rect x="10" y="22" width="14" height="14" rx="2" fill="#fde047" stroke="#1e1b4b" stroke-width="2.5"/><path d="M26 36l7-16 7 16z" fill="#fff" stroke="#1e1b4b" stroke-width="2.5" stroke-linejoin="round"/></svg>')},
- {id:'fried-rice-at-eddies',name:'Fried Rice at Eddie\'s',desc:'The Fried Rice at Eddie\'s games by FallGameDev. Loads the live menu from the frae repo, so it is always up to date.',size:'10 KB',w:960,h:600,icon:'data:image/png;base64,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',html:"<!doctype html><html><head><meta charset=\"utf-8\"><title>Fried Rice at Eddie's<\/title><style>html,body{margin:0;height:100%;background:#000}iframe{border:0;width:100%;height:100%;display:block}a{position:fixed;right:8px;bottom:8px;font:12px Segoe UI,sans-serif;color:#fff;background:#000a;padding:4px 8px;border-radius:6px;text-decoration:none;opacity:.6}a:hover{opacity:1}<\/style><\/head><body><iframe src=\"https://fallgamedev.github.io/frae/\" allow=\"autoplay; fullscreen; gamepad; clipboard-write; pointer-lock\" allowfullscreen><\/iframe><a href=\"https://fallgamedev.github.io/frae/\" target=\"_blank\">Open in a browser tab<\/a><\/body><\/html>"},
- {id:'app-builder',name:'App Builder',desc:'Make your own apps. Copy a GitHub repo, upload an HTML file, wrap a website, or code in the built-in editor.',size:'35 KB',w:960,h:600,icon:BI('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#06b6d4"/><stop offset="1" stop-color="#3b82f6"/></linearGradient></defs><rect x="2" y="2" width="44" height="44" rx="11" fill="url(#g)"/><path d="M19 17l-7 7 7 7M29 17l7 7-7 7" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M26 14l-4 20" stroke="#fde047" stroke-width="3.5" stroke-linecap="round"/></svg>'),html:"<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>App Builder<\/title>\n<style>\n/* ===== App Builder: looks like part of the OS (dark, clean, one accent color) ===== */\n:root{--bg:#1f1f1f;--sf:#2b2b2b;--sf2:#333;--bd:#ffffff1f;--tx:#fff;--dim:#ffffff9e;--acc:#4cc2ff;--bad:#ff6b6b;--good:#4ade80}\n*{box-sizing:border-box}\nhtml,body{height:100%;margin:0;background:var(--bg);color:var(--tx);font:14px/1.4 \"Segoe UI\",system-ui,sans-serif}\nbutton,input,select,textarea{font:inherit;color:var(--tx)}\nbutton{background:var(--sf2);border:1px solid var(--bd);border-radius:7px;padding:6px 12px;cursor:pointer}\nbutton:hover{background:#3d3d3d}\nbutton.pri{background:var(--acc);color:#001a26;border-color:transparent;font-weight:600}\nbutton.pri:hover{filter:brightness(1.1)}\nbutton:disabled{opacity:.45;cursor:default}\ninput,select,textarea{background:#171717;border:1px solid var(--bd);border-radius:7px;padding:6px 9px;outline:none}\ninput:focus,select:focus,textarea:focus{border-color:var(--acc)}\n#app{height:100%;display:flex;flex-direction:column}\n/* Start screen */\n.home{flex:1;overflow:auto;padding:22px}\n.home h1{margin:0 0 4px;font-weight:500}\n.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px;margin-top:18px}\n.card{background:var(--sf);border:1px solid var(--bd);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:9px}\n.card h3{margin:0;font-weight:600}\n.card p{margin:0;color:var(--dim);flex:1}\n.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}\n/* Editor screen */\n.top{display:flex;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--bd);background:#242424;flex-wrap:wrap}\n.top label{color:var(--dim);font-size:12px}\n.main{flex:1;display:flex;min-height:0}\n.files{width:190px;border-right:1px solid var(--bd);background:#242424;display:flex;flex-direction:column;flex:none}\n.files .list{flex:1;overflow:auto;padding:6px}\n.f{padding:5px 8px;border-radius:6px;cursor:pointer;display:flex;justify-content:space-between;gap:6px;white-space:nowrap}\n.f span{overflow:hidden;text-overflow:ellipsis}\n.f:hover{background:#ffffff12}.f.on{background:#ffffff22}\n.f small{color:var(--dim)}\n.f.entry:before{content:\"\u25b6\";color:var(--good);font-size:10px;margin-right:4px}\n.ed{flex:1;display:flex;flex-direction:column;min-width:0}\n.ed textarea{flex:1;border:0;border-radius:0;resize:none;font:13px/1.5 Consolas,Menlo,monospace;tab-size:2;white-space:pre;background:#161616}\n.info{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:var(--dim);padding:20px;text-align:center}\n.info img{max-width:60%;max-height:50%;background:#fff2;border-radius:8px}\n.pv{flex:1;min-width:0;border-left:1px solid var(--bd);display:flex;flex-direction:column;background:#000}\n.pv iframe{flex:1;border:0;background:#fff}\n.bar{display:flex;gap:10px;align-items:center;padding:6px 10px;border-top:1px solid var(--bd);background:#242424;color:var(--dim);font-size:12px}\n.bar .ok{color:var(--good)}.bar .bad{color:var(--bad)}\n/* Pop-up windows inside the app */\n.modal{position:fixed;inset:0;background:#000a;display:flex;align-items:center;justify-content:center;z-index:50}\n.dlg{background:var(--sf);border:1px solid var(--bd);border-radius:12px;padding:18px;width:min(520px,92vw);max-height:88vh;display:flex;flex-direction:column;gap:10px}\n.dlg .scroll{overflow:auto;max-height:46vh;border:1px solid var(--bd);border-radius:8px;padding:4px}\n.fl{display:flex;gap:8px;align-items:center;padding:3px 6px}.fl span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.fl small{color:var(--dim)}\n.sw{display:inline-block;width:26px;height:26px;border-radius:7px;cursor:pointer;border:2px solid transparent}.sw.on{border-color:#fff}\n.prog{height:8px;background:#ffffff1c;border-radius:4px;overflow:hidden}.prog i{display:block;height:100%;width:0;background:var(--acc);transition:width .15s}\n<\/style>\n<\/head>\n<body>\n<div id=\"app\"><\/div>\n<script>\n\"use strict\";\n/* ============================================================\n   App Builder: makes .amo apps for AmogOs (OS.Lite).\n   An .amo file is JSON: {amo:1, id, name, version, icon, width, height, entry, files:{path: base64}}\n   Four ways to start: GitHub repo, HTML file, website wrapper, or from scratch. Then edit, preview, install.\n   ============================================================ */\nconst $=(s,e=document)=>e.querySelector(s);\nconst esc=s=>String(s).replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));\nconst inOS=window.parent!==window; // true when running inside an AmogOs window\n\n/* ---------- The app being built ----------\n   files[path] is {text:\"...\"} for text files or {b64:\"...\",size:123} for pictures, sounds, etc. */\nlet app=null,curFile='',showPreview=false;\nconst blank=()=>({name:'My App',id:'my-app',version:'1.0',width:900,height:560,entry:'index.html',icon:'',files:{}});\n\n/* ---------- Small helpers ---------- */\nconst TEXT_EXT=/\\.(html?|css|js|mjs|json|txt|md|svg|xml|csv|glsl|frag|vert)$/i;\nconst isText=p=>TEXT_EXT.test(p);\nconst u8b64=t=>btoa(unescape(encodeURIComponent(t)));      // text -> base64 (same method the OS uses)\nconst b64u8=b=>decodeURIComponent(escape(atob(b)));         // base64 -> text\nconst slug=n=>String(n).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'')||'app';\nfunction bufB64(buf){ // ArrayBuffer -> base64, in chunks so big files do not crash\n const a=new Uint8Array(buf);let s='';for(let i=0;i<a.length;i+=0x8000)s+=String.fromCharCode.apply(null,a.subarray(i,i+0x8000));return btoa(s);\n}\nconst kb=n=>n>=1048576?(n/1048576).toFixed(1)+' MB':Math.max(1,Math.round(n/1024))+' KB';\nfunction say(msg,cls){const s=$('#msg');if(s){s.textContent=msg;s.className=cls||''}}\n\n/* Small pop-up question box (the built-in prompt() looks bad). Resolves with the text, or null. */\nfunction ask(msg,def,ok){\n return new Promise(res=>{\n  const m=document.createElement('div');m.className='modal';\n  m.innerHTML=`<div class=\"dlg\"><div>${msg}<\/div><input id=\"ai\" value=\"${esc(def||'')}\"><div class=\"row\" style=\"justify-content:flex-end\"><button class=\"pri\" id=\"ok\">${ok||'OK'}<\/button><button id=\"no\">Cancel<\/button><\/div><\/div>`;\n  document.body.appendChild(m);const i=$('#ai',m);i.focus();i.select();\n  const done=v=>{m.remove();res(v)};\n  i.onkeydown=e=>{if(e.key==='Enter')done(i.value.trim());if(e.key==='Escape')done(null)};\n  $('#ok',m).onclick=()=>done(i.value.trim());$('#no',m).onclick=()=>done(null);\n });\n}\n\n/* ---------- Icons: a colored square with a letter, or the user's own picture ---------- */\nconst PALETTE=[['#7c3aed','#ec4899'],['#06b6d4','#3b82f6'],['#f97316','#ef4444'],['#22c55e','#06b6d4'],['#eab308','#f97316'],['#6366f1','#8b5cf6'],['#14b8a6','#22c55e'],['#475569','#0f172a']];\nfunction letterIcon(name,pi){\n const [a,b]=PALETTE[pi%PALETTE.length],ch=esc((name.trim()[0]||'A').toUpperCase());\n const svg=`<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 48 48\"><defs><linearGradient id=\"g\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\"><stop offset=\"0\" stop-color=\"${a}\"/><stop offset=\"1\" stop-color=\"${b}\"/><\/linearGradient><\/defs><rect x=\"2\" y=\"2\" width=\"44\" height=\"44\" rx=\"11\" fill=\"url(#g)\"/><text x=\"24\" y=\"33\" font-family=\"Segoe UI,Arial\" font-size=\"26\" font-weight=\"700\" text-anchor=\"middle\" fill=\"#fff\">${ch}<\/text><\/svg>`;\n return 'data:image/svg+xml;base64,'+btoa(svg);\n}\nlet palIdx=0;\nfunction ensureIcon(){if(!app.icon)app.icon=letterIcon(app.name,palIdx)}\nfunction pictureIcon(file){ // any picture -> 96x96 png data URL\n return new Promise((ok,no)=>{const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{const c=document.createElement('canvas');c.width=c.height=96;const x=c.getContext('2d');const s=Math.min(im.width,im.height);x.drawImage(im,(im.width-s)/2,(im.height-s)/2,s,s,0,0,96,96);ok(c.toDataURL('image/png'))};im.onerror=no;im.src=r.result};r.onerror=no;r.readAsDataURL(file)});\n}\n\n/* ---------- Packaging: turn the editor state into a real .amo ---------- */\nfunction filesB64(){const o={};for(const [p,f] of Object.entries(app.files))o[p]=f.text!=null?u8b64(f.text):f.b64;return o}\nfunction buildAmo(){\n ensureIcon();\n return JSON.stringify({amo:1,id:app.id||slug(app.name),name:app.name,version:app.version,icon:app.icon,width:+app.width||900,height:+app.height||560,entry:app.entry,files:filesB64()});\n}\n/* Same page builder the OS uses: inlines css/js and swaps file paths for data urls. Used for the preview. */\nfunction amoBuild(pkg){\n const F=pkg.files,mime={png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',gif:'image/gif',webp:'image/webp',mp3:'audio/mpeg',ogg:'audio/ogg',wav:'audio/wav',woff2:'font/woff2',woff:'font/woff',ttf:'font/ttf',svg:'image/svg+xml',json:'application/json'};\n const asset={};for(const k in F)if(!/\\.(html?|css|js)$/i.test(k))asset[k]='data:'+(mime[k.split('.').pop().toLowerCase()]||'application/octet-stream')+';base64,'+F[k];\n const keys=Object.keys(asset).sort((a,c)=>c.length-a.length);\n const sub=t=>{for(const k of keys){t=t.split('./'+k).join(asset[k]);t=t.split(k).join(asset[k])}return t};\n const u8=k=>decodeURIComponent(escape(atob(F[k])));\n let html=u8(pkg.entry||'index.html');\n html=html.replace(/<link[^>]+href=[\"']([^\"']+)[\"'][^>]*>/gi,(m,h)=>{const k=h.replace(/^\\.\\//,'');return F[k]&&/\\.css$/i.test(k)?'<style>'+sub(u8(k))+'<\/style>':m});\n html=html.replace(/<script[^>]+src=[\"']([^\"']+)[\"'][^>]*><\\/script>/gi,(m,s)=>{const k=s.replace(/^\\.\\//,'');return F[k]?'<script>'+sub(u8(k)).replace(/<\\/script/gi,'<\\\\/script')+'<'+'/script>':m});\n return sub(html);\n}\n\n/* ---------- Starter templates ---------- */\nconst TEMPLATES={\n blank:{name:'My App',files:{'index.html':'<!DOCTYPE html>\\n<html>\\n<head>\\n  <meta charset=\"utf-8\">\\n  <title>My App<\/title>\\n  <link rel=\"stylesheet\" href=\"style.css\">\\n<\/head>\\n<body>\\n  <h1>Hello!<\/h1>\\n  <script src=\"app.js\"><\\/script>\\n<\/body>\\n<\/html>\\n','style.css':'/* Your styles go here */\\nbody{font-family:sans-serif;background:#10244d;color:#fff;text-align:center;padding-top:60px}\\n','app.js':'// Your code goes here\\nconsole.log(\"My app started!\");\\n'}},\n counter:{name:'Click Counter',files:{'index.html':'<!DOCTYPE html>\\n<html>\\n<head>\\n  <meta charset=\"utf-8\">\\n  <title>Click Counter<\/title>\\n  <link rel=\"stylesheet\" href=\"style.css\">\\n<\/head>\\n<body>\\n  <h1 id=\"n\">0<\/h1>\\n  <button id=\"b\">Click me!<\/button>\\n  <script src=\"app.js\"><\\/script>\\n<\/body>\\n<\/html>\\n','style.css':'body{font-family:sans-serif;background:#1b1340;color:#fff;text-align:center;padding-top:70px}\\n#n{font-size:96px;margin:0}\\nbutton{font-size:22px;padding:12px 28px;border:0;border-radius:12px;background:#ec4899;color:#fff;cursor:pointer}\\n','app.js':'// Add one every time the button is clicked\\nlet count=0;\\nconst out=document.getElementById(\"n\");\\ndocument.getElementById(\"b\").onclick=()=>{count++;out.textContent=count};\\n'}},\n game:{name:'Dodge Game',files:{'index.html':'<!DOCTYPE html>\\n<html>\\n<head>\\n  <meta charset=\"utf-8\">\\n  <title>Dodge Game<\/title>\\n  <style>html,body{margin:0;height:100%;background:#0b1020}canvas{display:block;margin:auto}<\/style>\\n<\/head>\\n<body>\\n  <canvas id=\"c\" width=\"480\" height=\"480\"><\/canvas>\\n  <script src=\"game.js\"><\\/script>\\n<\/body>\\n<\/html>\\n','game.js':'// Dodge the falling blocks. Move with the arrow keys or A and D.\\nconst c=document.getElementById(\"c\"),x=c.getContext(\"2d\");\\nlet me,blocks,score,dead,keys={};\\nfunction start(){me={x:220,y:430,w:40,h:40};blocks=[];score=0;dead=false}\\naddEventListener(\"keydown\",e=>keys[e.key.toLowerCase()]=true);\\naddEventListener(\"keyup\",e=>keys[e.key.toLowerCase()]=false);\\nc.onclick=()=>{if(dead)start()};\\nfunction loop(){\\n  // move the player\\n  if(keys.arrowleft||keys.a)me.x-=6;\\n  if(keys.arrowright||keys.d)me.x+=6;\\n  me.x=Math.max(0,Math.min(440,me.x));\\n  if(!dead){\\n    if(Math.random()<0.04)blocks.push({x:Math.random()*440,y:-40,s:2+Math.random()*3});\\n    blocks.forEach(b=>b.y+=b.s);\\n    blocks=blocks.filter(b=>b.y<500);\\n    score++;\\n    // hit check\\n    blocks.forEach(b=>{if(b.x<me.x+me.w&&b.x+40>me.x&&b.y<me.y+me.h&&b.y+40>me.y)dead=true});\\n  }\\n  // draw everything\\n  x.fillStyle=\"#0b1020\";x.fillRect(0,0,480,480);\\n  x.fillStyle=\"#4cc2ff\";x.fillRect(me.x,me.y,me.w,me.h);\\n  x.fillStyle=\"#ec4899\";blocks.forEach(b=>x.fillRect(b.x,b.y,40,40));\\n  x.fillStyle=\"#fff\";x.font=\"20px sans-serif\";x.fillText(\"Score: \"+score,10,28);\\n  if(dead)x.fillText(\"Crashed! Click to play again\",100,240);\\n  requestAnimationFrame(loop);\\n}\\nstart();loop();\\n'}}\n};\nfunction fromTemplate(k){\n const t=TEMPLATES[k];app=blank();app.name=t.name;app.id=slug(t.name);\n for(const p in t.files)app.files[p]={text:t.files[p]};\n app.entry='index.html';app.icon='';return app;\n}\n/* \"Website app\": a full-size frame that shows a live web page (good for games hosted on GitHub Pages) */\nfunction fromWebsite(url){\n let host=url;try{host=new URL(url).hostname.replace(/^www\\./,'')}catch(e){}\n app=blank();app.name=host;app.id=slug(host);app.width=960;app.height=600;app.icon='';\n app.files['index.html']={text:'<!DOCTYPE html>\\n<html>\\n<head>\\n  <meta charset=\"utf-8\">\\n  <title>'+esc(host)+'<\/title>\\n  <style>html,body{margin:0;height:100%;background:#000}iframe{border:0;width:100%;height:100%;display:block}<\/style>\\n<\/head>\\n<body>\\n  <!-- This app shows a live website. Sites that refuse to be framed will not work. -->\\n  <iframe src=\"'+esc(url)+'\" allow=\"autoplay; fullscreen; gamepad; clipboard-write; pointer-lock\" allowfullscreen><\/iframe>\\n<\/body>\\n<\/html>\\n'};\n return app;\n}\n\n/* ---------- Loading: HTML file, .amo file, GitHub repo ---------- */\nasync function loadHtmlFile(f){\n const t=await f.text(),m=t.match(/<title[^>]*>([^<]*)<\\/title>/i);\n app=blank();app.name=(m&&m[1].trim())||f.name.replace(/\\.html?$/i,'');app.id=slug(app.name);app.files['index.html']={text:t};\n}\nasync function loadAmoFile(f){\n const o=JSON.parse(await f.text());if(o.amo!==1||!o.files)throw new Error('That is not an .amo app file.');\n app=blank();Object.assign(app,{name:o.name||'App',id:o.id||slug(o.name||'app'),version:o.version||'1.0',width:o.width||900,height:o.height||560,entry:o.entry||'index.html',icon:o.icon||''});\n for(const [p,b] of Object.entries(o.files)){\n  if(isText(p)){try{app.files[p]={text:b64u8(b)};continue}catch(e){}}\n  app.files[p]={b64:b,size:Math.round(b.length*0.75)};\n }\n}\n// Turn \"owner/repo\" or a github.com link into parts\nfunction parseRepo(v){\n v=String(v).trim().replace(/\\.git$/i,'').replace(/\\/$/,'');\n let m=v.match(/github\\.com\\/([^\\/\\s]+)\\/([^\\/\\s#?]+)(?:\\/tree\\/([^\\/\\s]+)(?:\\/(.+))?)?/i);\n if(m)return{o:m[1],r:m[2],b:m[3]||'',sub:m[4]||''};\n m=v.match(/^([\\w.-]+)\\/([\\w.-]+)$/);\n return m?{o:m[1],r:m[2],b:'',sub:''}:null;\n}\nasync function githubList(p){ // finds the branch, then lists every file in the repo\n if(!p.b){const r=await fetch(`https://api.github.com/repos/${p.o}/${p.r}`);if(!r.ok)throw new Error(r.status===404?'That repo was not found. Is it public?':'GitHub is busy. Try again in a minute.');p.b=(await r.json()).default_branch}\n const r=await fetch(`https://api.github.com/repos/${p.o}/${p.r}/git/trees/${encodeURIComponent(p.b)}?recursive=1`);\n if(!r.ok)throw new Error('Could not read that repo. Try again in a minute.');\n const j=await r.json(),pre=p.sub?p.sub.replace(/\\/$/,'')+'/':'';\n return j.tree.filter(x=>x.type==='blob'&&x.path.startsWith(pre)).map(x=>({path:x.path,name:x.path.slice(pre.length),size:x.size||0}));\n}\n// Files we pick for you: skip hidden files, node_modules, and anything over 4 MB\nconst skipByDefault=f=>/(^|\\/)(\\.|node_modules\\/)/.test(f.name)||f.size>4*1048576;\nfunction chooseFiles(list,p){ // pop-up with checkboxes, resolves with the chosen files or null\n return new Promise(res=>{\n  const m=document.createElement('div');m.className='modal';\n  const rows=list.map((f,i)=>`<label class=\"fl\"><input type=\"checkbox\" data-i=\"${i}\" ${skipByDefault(f)?'':'checked'}><span title=\"${esc(f.name)}\">${esc(f.name)}<\/span><small>${kb(f.size)}<\/small><\/label>`).join('');\n  m.innerHTML=`<div class=\"dlg\"><b>${esc(p.o)}/${esc(p.r)}<\/b> <span style=\"color:var(--dim)\">(branch ${esc(p.b)})<\/span><div style=\"color:var(--dim)\">Pick the files to copy. Big files are left unchecked.<\/div><div class=\"scroll\">${rows}<\/div><div id=\"tot\" style=\"color:var(--dim)\"><\/div><div class=\"row\" style=\"justify-content:flex-end\"><button class=\"pri\" id=\"ok\">Copy these files<\/button><button id=\"no\">Cancel<\/button><\/div><\/div>`;\n  document.body.appendChild(m);\n  const tot=()=>{const c=[...m.querySelectorAll('input:checked')];const n=c.reduce((a,x)=>a+list[+x.dataset.i].size,0);$('#tot',m).textContent=c.length+' files, '+kb(n)+(n>25*1048576?'  (that is a lot for one app)':'')};\n  m.onchange=tot;tot();\n  $('#ok',m).onclick=()=>{const c=[...m.querySelectorAll('input:checked')].map(x=>list[+x.dataset.i]);m.remove();res(c)};\n  $('#no',m).onclick=()=>{m.remove();res(null)};\n });\n}\nasync function githubLoad(input,bar){\n const p=parseRepo(input);if(!p)throw new Error('Type a repo like FallGameDev/gd-clone or paste its github.com link.');\n say('Looking at the repo\u2026');\n const list=await githubList(p);if(!list.length)throw new Error('No files found there.');\n const pick=await chooseFiles(list,p);if(!pick||!pick.length){say('');return false}\n app=blank();app.name=p.r.replace(/[-_]+/g,' ');app.id=slug(p.r);\n let done=0;const total=pick.length;\n const getOne=async f=>{ // download one file from raw.githubusercontent.com\n  // raw.githubusercontent.com/owner/repo/branch/path (every path piece is url-encoded)\n  const full=(p.sub?p.sub.replace(/\\/$/,'')+'/':'')+f.name;\n  const url='https://raw.githubusercontent.com/'+[p.o,p.r,p.b].map(encodeURIComponent).join('/')+'/'+full.split('/').map(encodeURIComponent).join('/');\n  const r=await fetch(url);if(!r.ok)throw new Error('Could not download '+f.name);\n  if(isText(f.name))app.files[f.name]={text:await r.text()};\n  else{const buf=await r.arrayBuffer();app.files[f.name]={b64:bufB64(buf),size:buf.byteLength}}\n  done++;bar(done/total);say('Copied '+done+' of '+total+' files\u2026');\n };\n const queue=[...pick];await Promise.all(Array.from({length:6},async()=>{while(queue.length)await getOne(queue.shift())}));\n // entry: index.html at the top, otherwise the first html file\n app.entry=app.files['index.html']?'index.html':(Object.keys(app.files).find(k=>/\\.html?$/i.test(k))||'index.html');\n // icon: look for a picture called icon, logo or favicon\n const ic=Object.keys(app.files).find(k=>/(^|\\/)(icon|logo|favicon)[^\\/]*\\.(png|jpg|jpeg|webp)$/i.test(k));\n if(ic){try{const mt=/png$/i.test(ic)?'png':'jpeg';const bl=await (await fetch('data:image/'+mt+';base64,'+app.files[ic].b64)).blob();app.icon=await pictureIcon(bl)}catch(e){}}\n return true;\n}\n\n/* ---------- Screen 1: Start ---------- */\nfunction showStart(msg){\n $('#app').innerHTML=`<div class=\"home\"><h1>App Builder<\/h1><div style=\"color:var(--dim)\">Make an app for AmogOs. Pick a way to start.<\/div>\n <div class=\"cards\">\n  <div class=\"card\"><h3>Copy from GitHub<\/h3><p>Type a repo and the builder copies its files into an app.<\/p><input id=\"gh\" placeholder=\"FallGameDev/gd-clone\"><div class=\"prog\" id=\"gp\" hidden><i><\/i><\/div><button class=\"pri\" id=\"ghb\">Copy repo<\/button><\/div>\n  <div class=\"card\"><h3>Upload an HTML file<\/h3><p>Turn any .html page or game into an app.<\/p><input id=\"hf\" type=\"file\" accept=\".html,.htm\" hidden><button class=\"pri\" id=\"hfb\">Choose HTML file<\/button><\/div>\n  <div class=\"card\"><h3>Wrap a website<\/h3><p>Make an app that shows a live website, like a game on GitHub Pages.<\/p><input id=\"wu\" placeholder=\"https://fallgamedev.github.io/frae/\"><button class=\"pri\" id=\"wub\">Make app<\/button><\/div>\n  <div class=\"card\"><h3>Build from scratch<\/h3><p>Use the code editor. Start blank or from an example.<\/p><select id=\"tp\"><option value=\"blank\">Blank page<\/option><option value=\"counter\">Click counter<\/option><option value=\"game\">Dodge game<\/option><\/select><button class=\"pri\" id=\"tpb\">Start building<\/button><\/div>\n  <div class=\"card\"><h3>Open an .amo file<\/h3><p>Edit an app you already have.<\/p><input id=\"af\" type=\"file\" accept=\".amo,application/json\" hidden><button id=\"afb\">Choose .amo file<\/button><\/div>\n <\/div><div id=\"msg\" style=\"margin-top:16px;color:var(--dim)\">${esc(msg||'')}<\/div><\/div>`;\n const go=()=>{curFile=app.entry&&app.files[app.entry]?app.entry:Object.keys(app.files)[0]||'';showPreview=false;showEditor()};\n const fail=e=>say(e.message||'Something went wrong.','bad');\n $('#ghb').onclick=async()=>{const b=$('#ghb'),bar=$('#gp');b.disabled=true;bar.hidden=false;\n  try{if(await githubLoad($('#gh').value,v=>bar.firstChild.style.width=(v*100)+'%'))go()}catch(e){fail(e)}b.disabled=false;bar.hidden=true};\n $('#gh').onkeydown=e=>{if(e.key==='Enter')$('#ghb').click()};\n $('#hfb').onclick=()=>$('#hf').click();$('#hf').onchange=async e=>{const f=e.target.files[0];if(f){await loadHtmlFile(f);go()}};\n $('#wub').onclick=()=>{let u=$('#wu').value.trim();if(!u)return say('Type a website address first.','bad');if(!/^https?:\\/\\//i.test(u))u='https://'+u;fromWebsite(u);go()};\n $('#tpb').onclick=()=>{fromTemplate($('#tp').value);go()};\n $('#afb').onclick=()=>$('#af').click();$('#af').onchange=async e=>{const f=e.target.files[0];if(f){try{await loadAmoFile(f);go()}catch(x){fail(x)}}};\n}\n\n/* ---------- Screen 2: Editor ---------- */\nfunction showEditor(){\n ensureIcon();\n $('#app').innerHTML=`<div class=\"top\">\n  <button id=\"back\" title=\"Back to the start screen\">\u2039 Start<\/button>\n  <img id=\"ic\" src=\"${app.icon}\" width=\"30\" height=\"30\" style=\"border-radius:8px;cursor:pointer\" title=\"Change the icon\">\n  <input id=\"nm\" value=\"${esc(app.name)}\" style=\"width:150px\" title=\"App name\">\n  <label>Window<\/label><input id=\"aw\" type=\"number\" value=\"${app.width}\" style=\"width:64px\"><label>x<\/label><input id=\"ah\" type=\"number\" value=\"${app.height}\" style=\"width:64px\">\n  <label>Version<\/label><input id=\"av\" value=\"${esc(app.version)}\" style=\"width:54px\">\n  <label>Starts with<\/label><select id=\"en\"><\/select>\n  <span style=\"flex:1\"><\/span>\n  <button id=\"pv\">${showPreview?'Hide preview':'Run preview'}<\/button>\n  <button id=\"dl\">Download .amo<\/button>\n  <button class=\"pri\" id=\"in\" ${inOS?'':'disabled title=\"Install works inside AmogOs\"'}>Install<\/button>\n <\/div>\n <div class=\"main\"><div class=\"files\"><div class=\"row\" style=\"padding:6px\"><button id=\"nf\" style=\"flex:1\">+ New<\/button><button id=\"up\" title=\"Add pictures, sounds or other files\">Upload<\/button><input id=\"upf\" type=\"file\" multiple hidden><\/div><div class=\"list\" id=\"fl\"><\/div><\/div>\n  <div class=\"ed\" id=\"ed\"><\/div>${showPreview?'<div class=\"pv\"><iframe id=\"pf\" sandbox=\"allow-scripts allow-forms allow-popups allow-modals allow-pointer-lock\"><\/iframe><\/div>':''}<\/div>\n <div class=\"bar\"><span id=\"msg\"><\/span><span style=\"flex:1\"><\/span><span id=\"sz\"><\/span><\/div>`;\n drawFiles();drawEditor();drawEntry();size();\n if(showPreview)runPreview();\n // top bar fields write straight into the app\n $('#back').onclick=()=>showStart();\n $('#nm').oninput=e=>{app.name=e.target.value||'App';app.id=slug(app.name);if(app.icon.startsWith('data:image/svg+xml')){app.icon=letterIcon(app.name,palIdx);$('#ic').src=app.icon}};\n $('#aw').oninput=e=>app.width=+e.target.value;$('#ah').oninput=e=>app.height=+e.target.value;$('#av').oninput=e=>app.version=e.target.value;\n $('#en').onchange=e=>{app.entry=e.target.value;drawFiles()};\n $('#ic').onclick=iconDialog;\n $('#pv').onclick=()=>{showPreview=!showPreview;showEditor()};\n $('#nf').onclick=async()=>{const n=await ask('Name for the new file (like page2.html or extra.js)','new-file.js','Create');if(!n)return;if(app.files[n])return say('That file already exists.','bad');app.files[n]={text:''};curFile=n;drawFiles();drawEditor();drawEntry()};\n $('#up').onclick=()=>$('#upf').click();$('#upf').onchange=e=>addFiles([...e.target.files]);\n $('#fl').ondragover=e=>e.preventDefault();$('#fl').ondrop=e=>{e.preventDefault();addFiles([...e.dataTransfer.files])};\n $('#dl').onclick=()=>{const blob=new Blob([buildAmo()],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=(app.id||'app')+'.amo';document.body.appendChild(a);a.click();a.remove();say('Saved '+a.download,'ok')};\n $('#in').onclick=()=>{say('Waiting for AmogOs\u2026');parent.postMessage({amoInstall:buildAmo(),name:app.name},'*')};\n}\n// AmogOs answers the Install button with {amoInstalled:true|false}\naddEventListener('message',e=>{if(e.data&&typeof e.data==='object'&&'amoInstalled' in e.data)say(e.data.amoInstalled?'Installed! Find it on your desktop.':'Not installed.',e.data.amoInstalled?'ok':'bad')});\n\nasync function addFiles(list){\n for(const f of list){\n  if(isText(f.name))app.files[f.name]={text:await f.text()};\n  else{const buf=await f.arrayBuffer();app.files[f.name]={b64:bufB64(buf),size:buf.byteLength}}\n }\n if(list.length)curFile=list[list.length-1].name;\n drawFiles();drawEditor();drawEntry();size();\n}\nfunction drawEntry(){ // the \"Starts with\" list only offers html files\n const h=Object.keys(app.files).filter(k=>/\\.html?$/i.test(k));if(!h.includes(app.entry)&&h.length)app.entry=h[0];\n $('#en').innerHTML=h.map(k=>`<option ${k===app.entry?'selected':''}>${esc(k)}<\/option>`).join('')||'<option>(add an html file)<\/option>';\n}\nfunction drawFiles(){\n const names=Object.keys(app.files).sort();\n $('#fl').innerHTML=names.map(n=>{const f=app.files[n],sz=f.text!=null?f.text.length:f.size;return`<div class=\"f ${n===curFile?'on':''} ${n===app.entry?'entry':''}\" data-n=\"${esc(n)}\"><span>${esc(n)}<\/span><small>${kb(sz)}<\/small><\/div>`}).join('')||'<div style=\"color:var(--dim);padding:8px\">No files yet<\/div>';\n $('#fl').onclick=e=>{const d=e.target.closest('.f');if(d){curFile=d.dataset.n;drawFiles();drawEditor()}};\n $('#fl').oncontextmenu=e=>{const d=e.target.closest('.f');if(!d)return;e.preventDefault();fileMenu(d.dataset.n)};\n}\n// Rename / delete (shown as a small pop-up because right-click menus belong to the OS)\nfunction fileMenu(n){\n const m=document.createElement('div');m.className='modal';\n m.innerHTML=`<div class=\"dlg\"><b>${esc(n)}<\/b><div class=\"row\"><button id=\"r\">Rename<\/button><button id=\"d\">Delete<\/button><button id=\"e\">Make this the start file<\/button><button id=\"c\">Close<\/button><\/div><\/div>`;\n document.body.appendChild(m);\n $('#c',m).onclick=()=>m.remove();\n $('#e',m).onclick=()=>{if(/\\.html?$/i.test(n)){app.entry=n;drawEntry();drawFiles()}else say('Only html files can be the start file.','bad');m.remove()};\n $('#d',m).onclick=()=>{m.remove();delete app.files[n];if(curFile===n)curFile=Object.keys(app.files)[0]||'';drawFiles();drawEditor();drawEntry();size()};\n $('#r',m).onclick=async()=>{m.remove();const v=await ask('New name',n,'Rename');if(!v||v===n)return;if(app.files[v])return say('That name is used.','bad');app.files[v]=app.files[n];delete app.files[n];if(app.entry===n)app.entry=v;if(curFile===n)curFile=v;drawFiles();drawEditor();drawEntry()};\n}\nfunction drawEditor(){\n const ed=$('#ed'),f=app.files[curFile];\n if(!f){ed.innerHTML='<div class=\"info\">Pick a file on the left, or make a new one.<\/div>';return}\n if(f.text==null){ // pictures and sounds cannot be typed, but they can be previewed or removed\n  const img=/\\.(png|jpe?g|gif|webp)$/i.test(curFile);\n  ed.innerHTML=`<div class=\"info\">${img?`<img src=\"data:image/${curFile.split('.').pop().toLowerCase().replace('jpg','jpeg')};base64,${f.b64}\">`:''}<div>${esc(curFile)} is not a text file (${kb(f.size)}).<br>Right-click it in the list to rename or delete it.<\/div><\/div>`;return;\n }\n ed.innerHTML='<textarea id=\"code\" spellcheck=\"false\" wrap=\"off\"><\/textarea>';\n const t=$('#code');t.value=f.text;\n t.oninput=()=>{f.text=t.value;clearTimeout(sizeT);sizeT=setTimeout(size,400)};\n t.onkeydown=e=>{ // Tab key types two spaces instead of leaving the box\n  if(e.key==='Tab'){e.preventDefault();const s=t.selectionStart;t.setRangeText('  ',s,t.selectionEnd,'end');f.text=t.value}\n  if(e.key==='Enter'&&e.ctrlKey){e.preventDefault();showPreview=true;showEditor()}\n };\n}\nfunction runPreview(){\n try{const pkg=JSON.parse(buildAmo());$('#pf').srcdoc=amoBuild(pkg)}\n catch(e){$('#pf').srcdoc='<body style=\"font-family:sans-serif;padding:20px\">Could not build a preview. Add an html file first.<\/body>'}\n}\nlet sizeT; // timer so the size meter does not rebuild the whole app on every key press\nfunction size(){const n=buildAmo().length;$('#sz').textContent='App size: '+kb(n)+(n>30*1048576?'  (very big, it may be slow to install)':'')}\nfunction iconDialog(){\n const m=document.createElement('div');m.className='modal';\n m.innerHTML=`<div class=\"dlg\"><b>App icon<\/b><div>Pick a color for the letter icon:<\/div><div>${PALETTE.map((p,i)=>`<span class=\"sw ${i===palIdx?'on':''}\" data-p=\"${i}\" style=\"background:linear-gradient(135deg,${p[0]},${p[1]})\"><\/span>`).join(' ')}<\/div><div class=\"row\"><button id=\"pic\">Use my own picture<\/button><input id=\"pf2\" type=\"file\" accept=\"image/*\" hidden><button id=\"ok\" class=\"pri\" style=\"margin-left:auto\">Done<\/button><\/div><\/div>`;\n document.body.appendChild(m);\n m.onclick=e=>{const p=e.target.dataset.p;if(p!=null){palIdx=+p;app.icon=letterIcon(app.name,palIdx);$('#ic').src=app.icon;m.querySelectorAll('.sw').forEach(s=>s.classList.toggle('on',+s.dataset.p===palIdx))}};\n $('#pic',m).onclick=()=>$('#pf2',m).click();\n $('#pf2',m).onchange=async e=>{const f=e.target.files[0];if(f){try{app.icon=await pictureIcon(f);$('#ic').src=app.icon}catch(x){say('Could not read that picture.','bad')}}};\n $('#ok',m).onclick=()=>m.remove();\n}\n\nshowStart();\n<\/script>\n<\/body>\n<\/html>\n"}
-];
-let storeCat=[];
-async function loadCatalogs(){ // extra catalogs from Settings > Apps
- const out=[];for(const u of S().storeSrc.split(/[\s,]+/).filter(Boolean)){try{const j=await(await fetch(u)).json();(j.apps||[]).forEach(a=>out.push(Object.assign({},a,{url:new URL(a.url,u).href})))}catch(e){}}storeCat=out;
-}
-async function storeGet(a){
- try{
-  let text;
-  if(a.html)text=JSON.stringify({amo:1,id:a.id,name:a.name,icon:a.icon,width:a.w,height:a.h,entry:'index.html',files:{'index.html':btoa(unescape(encodeURIComponent(a.html)))}});
-  else{const r=await fetch(a.url);if(!r.ok)throw 0;text=await r.text()}
-  const o=JSON.parse(text);if(o.amo!==1||!o.files)throw 0;
-  if(installAmo(text,a.name,true))toast(a.name+' was installed and added to the desktop');
- }catch(e){toast('Couldn’t download that app.')}
-}
-function storeApp(b){
- let q='';
- const draw=()=>{
-  const all=[...STORE_APPS,...storeCat].filter(a=>(a.name+' '+(a.desc||a.description||'')).toLowerCase().includes(q));
-  b.innerHTML=`<div class="fill"><div class="tl"><b style="font-size:16px">App Store</b><input class="qs" placeholder="Search apps" value="${esc(q)}" style="flex:1;min-width:120px"></div><div style="flex:1;overflow:auto;padding:12px;display:flex;flex-wrap:wrap;gap:12px;align-content:flex-start">${all.map((a,i)=>{const have=!!U().fs[APPDIR+'/'+safeName(a.name)+'.amo'];return`<div class="scard"><div style="display:flex;gap:10px;align-items:center"><img src="${a.icon}" width="48" height="48" style="border-radius:11px"><div><b>${esc(a.name)}</b><div style="color:var(--dim);font-size:12px">${esc(a.size||'')}</div></div></div><div style="color:var(--dim);flex:1">${esc(a.desc||a.description||'')}</div><button class="${have?'':'pri'}" data-i="${i}" style="justify-content:center">${have?'Open':'Get'}</button></div>`}).join('')||'<p style="color:var(--dim)">No apps found.</p>'}</div></div>`;
-  const qs=$('.qs',b);qs.oninput=e=>{q=e.target.value.toLowerCase();draw();const n=$('.qs',b);n.focus();n.setSelectionRange(q.length,q.length)};
-  b.onclick=async e=>{const i=e.target.dataset.i;if(i==null)return;const a=all[+i],p=APPDIR+'/'+safeName(a.name)+'.amo';if(U().fs[p])return amoRun(p);e.target.disabled=true;e.target.textContent='Downloading…';await storeGet(a);draw()};
- };
- views.push({b,draw});draw();loadCatalogs().then(()=>{if(b.isConnected)draw()});
-}
-/* --- Calculator --- */
-function calcApp(b){
- const k=['C','(',')','/','7','8','9','*','4','5','6','-','1','2','3','+','0','.','⌫','='];
- b.innerHTML=`<div class="fill"><input class="d" readonly style="margin:10px;font-size:28px;text-align:right;border-radius:8px" value="0"><div class="cb">${k.map(x=>`<button ${x==='='?'class="pri"':''}>${x}</button>`).join('')}</div></div>`;
- const d=$('.d',b);let s='';
- b.onclick=e=>{const x=e.target.textContent;if(e.target.tagName!=='BUTTON')return;
-  if(x==='C')s='';else if(x==='⌫')s=s.slice(0,-1);
-  else if(x==='='){try{if(/^[\d+\-*/.() ]+$/.test(s))s=String(+Function('"use strict";return('+s+')')().toFixed(10))}catch(err){s=''}}
-  else s+=x;d.value=s||'0'};
-}
-/* --- Settings --- */
-function setSetting(k,v){const u=U();u.set=u.set||{};u.set[k]=v;persist();applySettings()}
-function applySettings(){ // pushes every setting onto the screen
- if(!me)return;const s=S(),os=$('#os'),r=document.documentElement;
- Object.assign(os.dataset,{dock:s.dock,hide:s.autohide?'1':'0',align:s.align,clock:s.clock?'1':'0',start:s.showStart?'1':'0'});
- os.style.setProperty('--ds',dsz()+'px');os.style.setProperty('--tk',dsz()+22+'px');
- r.style.setProperty('--fs',s.textSize+'px');r.style.setProperty('--acc',s.hc?'#ffe600':s.accent);
- os.style.zoom=s.scale/100;
- r.dataset.hc=s.hc?'1':'0';r.dataset.rm=s.rm?'1':'0';r.dataset.bc=s.bigcur?'1':'0';
- os.style.filter={none:'',gray:'grayscale(1)',invert:'invert(1) hue-rotate(180deg)',vivid:'saturate(1.8)'}[s.filter]||'';
- $('#dim').style.opacity=(100-s.brightness)/100*.85;$('#night').style.opacity=s.night?s.nightAmt/100*.5:0;
- paintPins();tick();
-}
-const fmtTime=d=>d.toLocaleTimeString([],{hour:'numeric',minute:'2-digit',...(S().secs?{second:'2-digit'}:{}),hour12:!S().h24});
-const fmtDate=d=>S().dfmt==='long'?d.toLocaleDateString([],{weekday:'short',month:'short',day:'numeric'}):d.toLocaleDateString();
-function tick(){const d=new Date();$('#tray').innerHTML=fmtTime(d)+'<br>'+fmtDate(d)}
-function placeSM(){ // Start menu opens next to the dock, wherever it is
- const sm=$('#sm'),os=$('#os'),d=os.dataset.dock,t=(os.dataset.hide==='1'?10:parseInt(os.style.getPropertyValue('--tk'))+10)+'px';
- Object.assign(sm.style,{left:'',right:'',top:'',bottom:'',transform:''});
- if(d==='bottom')Object.assign(sm.style,{left:'50%',bottom:t,transform:'translateX(-50%)'});
- else if(d==='top')Object.assign(sm.style,{left:'50%',top:t,transform:'translateX(-50%)'});
- else if(d==='left')Object.assign(sm.style,{left:t,bottom:'10px'});
- else Object.assign(sm.style,{right:t,bottom:'10px'});
-}
-/* Small builders for settings rows: switch, slider, dropdown, text box */
-const row2=(l,d,c)=>`<div class="row2"><div>${l}${d?`<small>${d}</small>`:''}</div>${c}</div>`;
-const tg=(k,l,d)=>row2(l,d,`<input type="checkbox" class="tg" data-k="${k}" ${S()[k]?'checked':''}>`);
-const sl=(k,l,mn,mx,st,d)=>row2(l,d,`<input type="range" data-k="${k}" data-n="1" min="${mn}" max="${mx}" step="${st}" value="${S()[k]}" style="width:170px">`);
-const sc=(k,l,o,num,d)=>row2(l,d,`<select data-k="${k}" ${num?'data-n="1"':''}>${o.map(x=>`<option value="${x[0]}" ${String(S()[k])===String(x[0])?'selected':''}>${x[1]}</option>`).join('')}</select>`);
-const tx=(k,l)=>row2(l,'',`<input data-k="${k}" value="${esc(S()[k])}" style="width:180px">`);
-function bindSet(pg){ // one handler for every control that has data-k
- pg.onchange=pg.oninput=e=>{const k=e.target.dataset.k;if(!k)return;const el=e.target;setSetting(k,el.type==='checkbox'?el.checked:el.dataset.n?+el.value:el.value)};
- const r=$('#rset',pg);if(r)r.onclick=async()=>{if(await ask('Reset all settings to their defaults?',null)){U().set={};save();applySettings();pg.closest('.bd')._show('General');toast('Settings were reset')}};
- const t=$('#tsnd',pg);if(t)t.onclick=beep;
- const cb=$('#cbd',pg);if(cb)cb.onclick=async()=>{if(await ask('Clear your history and bookmarks?',null)){U().browser={history:[],bookmarks:[]};persist();toast('Browsing data cleared')}};
-}
-
-const WALLS=['radial-gradient(circle at 25% 25%,#1b6bd1,transparent 55%),radial-gradient(circle at 80% 85%,#7a3fd1,transparent 55%),#0a1330','radial-gradient(circle at 70% 20%,#ff7a59,transparent 50%),radial-gradient(circle at 20% 90%,#c2185b,transparent 55%),#2a0b3f','radial-gradient(circle at 30% 30%,#14b8a6,transparent 55%),radial-gradient(circle at 85% 80%,#1d4ed8,transparent 55%),#06222b','linear-gradient(160deg,#111827,#374151)'];
-function importBox(el,done){ // restore UI used by setup and Settings
- el.innerHTML=`<p style="color:var(--dim);margin-top:0">Choose a backup file or paste its contents, then enter the backup password.</p><input type="file" accept=".json,application/json" style="width:100%"><textarea rows="3" placeholder="Or paste backup text here"></textarea><input type="password" placeholder="Backup password" style="width:100%;margin:6px 0"><button class="pri im">Restore</button>`;
- $('.im',el).onclick=async()=>{
-  try{
-   const f=$('input[type=file]',el).files[0];const txt=f?await f.text():$('textarea',el).value;
-   const o=await unseal(txt,$('input[type=password]',el).value);
-   DB.users[o.name]=o.rec;persist();toast('Restored the account “'+o.name+'”');done(o.name);
-  }catch(e){toast('Couldn’t restore. Check the file and password.')}
- };
-}
-function settingsApp(b,tab){
- const tabs=[['gear','General'],['monitor','Display'],['speaker','Sound'],['dock','Dock'],['access','Accessibility'],['bell','Notifications'],['globe','Browser'],['app','Apps'],['brush','Personalization'],['drive','Storage'],['user','Accounts'],['cloud','Backup'],['key','Activation'],['down','Update'],['info','About']];
- b.innerHTML=`<div class="fill" style="flex-direction:row"><div class="side" style="width:190px;padding-top:10px;border-right:1px solid var(--bd);background:#242424;overflow:auto">${tabs.map(t=>`<div data-t="${t[1]}">${ic(t[0],20)}${t[1]}</div>`).join('')}</div><div class="pg" style="flex:1;overflow:auto;padding:18px"></div></div>`;
- const pg=$('.pg',b);
- const row=(c,l,n,max)=>`<div style="display:flex;justify-content:space-between"><span>${l}</span><span style="color:var(--dim)">${fmt(n)}</span></div><div class="bar"><i style="width:${Math.max(.5,n/max*100)}%;background:${c}"></i></div>`;
- const pages={
-  General:()=>`<h2 style="margin-top:0">General</h2><div class="card">${tx('device','Device name')}${tg('h24','24-hour clock')}${tg('secs','Show seconds in the clock')}${sc('dfmt','Date format',[['short','Short'],['long','Long']])}${tg('maxWin','Open windows maximized')}${tg('confirmDel','Ask before moving items to the Trash')}</div><button id="rset">Reset all settings</button>`,
-  Display:()=>`<h2 style="margin-top:0">Display</h2><div class="card">${sl('brightness','Brightness',10,100,5)}${sc('scale','Interface size',[[80,'80%'],[90,'90%'],[100,'100% (recommended)'],[110,'110%'],[125,'125%'],[140,'140%']],1)}${tg('night','Night light','Warms the screen colors')}${sl('nightAmt','Night light strength',10,100,5)}</div>`,
-  Sound:()=>`<h2 style="margin-top:0">Sound</h2><div class="card">${tg('sounds','System sounds','A short sound when apps open')}${sl('volume','Volume',0,100,5)}</div><button id="tsnd">Play a test sound</button>`,
-  Dock:()=>`<h2 style="margin-top:0">Dock</h2><div class="card">${sc('dock','Position on screen',[['bottom','Bottom'],['top','Top'],['left','Left'],['right','Right']])}${sc('dockSize','Icon size',[['s','Small'],['m','Medium'],['l','Large']])}${sc('align','Alignment',[['center','Center'],['start','Start']])}${tg('autohide','Automatically hide the dock','Move the pointer to the screen edge to show it')}${tg('showStart','Show the Start button')}${tg('clock','Show date and time')}</div>`,
-  Accessibility:()=>`<h2 style="margin-top:0">Accessibility</h2><div class="card">${sc('textSize','Text size',[[13,'Small'],[14,'Default'],[16,'Large'],[18,'Larger'],[20,'Largest']],1)}${tg('hc','High contrast')}${tg('rm','Reduce motion','Turns off animations and transitions')}${tg('bigcur','Large mouse pointer')}${sc('filter','Color filter',[['none','None'],['gray','Grayscale'],['invert','Inverted'],['vivid','Vivid colors']])}</div>`,
-  Notifications:()=>`<h2 style="margin-top:0">Notifications</h2><div class="card">${tg('notif','Show notifications','Messages like “Saved” or “Moved to Trash”. Warnings always show.')}${sc('dur','Show for',[[2,'2 seconds'],[3,'3 seconds'],[5,'5 seconds'],[8,'8 seconds']],1)}</div>`,
-  Update:()=>`<h2 style="margin-top:0">Software update</h2><div class="card"><b>AmogOs ${OS_VERSION}</b><div id="us" style="color:var(--dim);margin:6px 0 12px">Checking…</div><div class="uprog" id="ubw" hidden><i id="ub"></i></div><button class="pri" id="uc">Check for updates</button> <button id="ui" hidden>Install update</button> <button id="uk" hidden>Cancel restart</button></div><div class="card">${tg('autoUpdate','Check for updates when AmogOs starts','A notification appears when a new version is out')}</div><div class="card"><b>Built-in version</b><p style="color:var(--dim)">If an update ever causes trouble, you can remove it and go back to the version this file came with.</p><button id="ur">Go back to the built-in version</button></div>`,
-  About:()=>`<h2 style="margin-top:0">About</h2><div class="card"><b>${esc(S().device)}</b><br><span style="color:var(--dim)">AmogOs ${OS_VERSION}<br>Storage: ${gbName(U().gb)}<br>Signed in as ${esc(me)}</span></div>`,
-  Storage:()=>{const u=U(),max=u.gb*1e9,f=Object.entries(u.fs),sz=pre=>f.filter(([k])=>k.startsWith(pre+'/')).reduce((n,[,r])=>n+(r.d?r.d.length:50),0)*SCALE,doc=sz('/Documents'),pic=sz('/Pictures'),us=used(u),oth=Math.max(0,us-SYS-doc-pic);
-   return`<h2 style="margin-top:0">Storage</h2><div class="card"><div style="font-size:22px">${fmt(us)} <span style="color:var(--dim);font-size:14px">used of ${gbName(u.gb)}</span></div><div class="bar" style="height:12px"><i style="width:${Math.min(100,us/max*100)}%"></i></div>${row('#8b5cf6','System',SYS,max)}${row('#4cc2ff','Documents',doc,max)}${row('#e43ba6','Pictures',pic,max)}${row('#ffd600','Other files',oth,max)}<div style="color:var(--dim)">${fmt(Math.max(0,max-us))} free</div></div>`},
-  Browser:()=>`<h2 style="margin-top:0">Browser</h2><div class="card">${sc('engine','Default search engine',Object.keys(ENGINES).map(k=>[k,ENGINES[k][0]]))}${row2('Page fetcher address','Your Supabase edge function. It downloads pages for Comet so sites that block frames still open.',`<input data-k="edgeUrl" value="${esc(S().edgeUrl)}" placeholder="https://YOUR-PROJECT.supabase.co/functions/v1/fetch-page" style="width:260px">`)}${row2('Supabase anon key','Only needed if your function checks logins',`<input data-k="edgeKey" type="password" value="${esc(S().edgeKey)}" style="width:260px">`)}${row2('Custom proxy (advanced)','Used only when no page fetcher is set. Put {url} where the page address goes',`<input data-k="proxy" value="${esc(S().proxy)}" placeholder="https://your-proxy.example/?u={url}" style="width:260px">`)}</div><button id="cbd">Clear history and bookmarks</button>`,
-  Apps:()=>`<h2 style="margin-top:0">Apps</h2><div class="card">${tg('startApps','Show installed apps in the Start menu')}${row2('Store sources','Addresses of app catalogs, separated by commas',`<input data-k="storeSrc" value="${esc(S().storeSrc)}" style="width:260px">`)}</div><p style="color:var(--dim)">Apps you open or install are kept in the Applications folder.</p>`,
-  Personalization:()=>{const u=U(),imgs=Object.keys(u.fs).filter(k=>u.fs[k].m&&u.fs[k].m.startsWith('image'));
-   return`<h2 style="margin-top:0">Personalization</h2><p>Background</p>${WALLS.map((w,i)=>`<div class="wp ${!u.wallImg&&(u.wall||0)===i?'on':''}" data-w="${i}" style="background:${w}"></div>`).join('')}<p>Accent color</p>${ACC.map(c=>`<span class="sw2 ${S().accent===c?'on':''}" data-acc="${c}" style="background:${c}"></span>`).join('')}<p>Your pictures</p>${imgs.map(k=>`<div class="wp ${u.wallImg===k?'on':''}" data-img="${esc(k)}" title="${esc(base(k))}" style="background-image:url('${u.fs[k].d}')"></div>`).join('')||'<p style="color:var(--dim)">No pictures yet. Browse for one below.</p>'}<br><button class="pri" id="bp">Browse for a picture</button>`},
-  Accounts:()=>`<h2 style="margin-top:0">Accounts</h2><div class="card" style="display:flex;gap:14px;align-items:center"><span class="av" style="width:56px;height:56px;font-size:24px">${esc(me[0].toUpperCase())}</span><div><b>${esc(me)}</b><br><span style="color:var(--dim)">Local account</span></div></div><button id="lo">Sign out</button> <button id="cpw">Change password</button> <button id="dl">Remove this account</button>`,
-  Backup:()=>`<h2 style="margin-top:0">Backup and restore</h2><div class="card"><b>Back up your files</b><p style="color:var(--dim)">Saves your account and all files into one password-protected file.</p><input id="ep" type="password" placeholder="Choose a password"> <button class="pri" id="ex">Back up now</button><textarea id="eo" rows="3" hidden style="margin-top:8px"></textarea></div><div class="card"><b>Restore from a backup</b><div id="imp" style="margin-top:8px"></div></div>`,
-  Activation:()=>`<h2 style="margin-top:0">Activation</h2><div class="card"><b>Storage plan: ${gbName(U().gb)}</b><p style="color:var(--dim)">Enter a product key to change your storage plan.</p><input id="pk" placeholder="XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX" style="width:100%"><br><br><button class="pri" id="ak">Activate</button></div>`
- };
- const show=t=>{
-  pg.innerHTML=pages[t]();bindSet(pg);b.querySelectorAll('.side div').forEach(d=>d.classList.toggle('on',d.dataset.t===t));
-  if(t==='Accounts'){$('#lo',pg).onclick=logout;$('#cpw',pg).onclick=async()=>{const v=await ask('New password (leave blank for none)','');if(v===null)return;U().h=await sha(v+me);U().blank=!v;save();toast(v?'Password changed':'Password removed')};$('#dl',pg).onclick=async()=>{if(await ask('Remove this account and all of its files?',null)){delete DB.users[me];persist();logout()}}}
-  if(t==='Update')bindUpdate(pg);
-  if(t==='Activation')$('#ak',pg).onclick=()=>{const g=KEYS[$('#pk',pg).value.trim().toLowerCase()];if(!g)return toast('That product key isn’t valid.');U().gb=g;save();toast('Activated: '+gbName(g)+' storage');show('Activation')};
-  if(t==='Backup'){
-   $('#ex',pg).onclick=async()=>{const pw=$('#ep',pg).value;if(!pw)return toast('Choose a password first');const txt=await seal({name:me,rec:U()},pw);const o=$('#eo',pg);o.hidden=false;o.value=txt;o.select();download('AmogOs-backup-'+me+'.json','data:application/json;charset=utf-8,'+encodeURIComponent(txt));toast('Backup ready. Copy the text if no download starts.')};
-   importBox($('#imp',pg),n=>{if(n===me)show('Backup')});
-  }
-  if(t==='Personalization'){
-   $('#bp',pg).onclick=()=>$('#wpf').click();
-   pg.onclick=e=>{const w=e.target.dataset.w,im=e.target.dataset.img,ac=e.target.dataset.acc;if(ac){setSetting('accent',ac);show(t)}else if(w!=null){U().wallImg=null;U().wall=+w;save();applyWall();show(t)}else if(im){setWall(im);show(t)}};
-  }
- };
- b.querySelector('.side').onclick=e=>{const d=e.target.closest('[data-t]');if(d)show(d.dataset.t)};
- b._show=show;show(tabs.some(t=>t[1]===tab)?tab:'General');
-}
-/* Picking a picture file: saves it to Pictures and uses it as the background */
-$('#wpf').onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f)return;const r=new FileReader();r.onload=()=>{const p='/Pictures/'+f.name;if(put(p,{t:'f',m:f.type||'image/png',d:r.result})){setWall(p);refreshAll();document.querySelectorAll('.pg').forEach(g=>g.closest('.bd')&&g.closest('.bd')._show&&g.closest('.bd')._show('Personalization'))}};r.readAsDataURL(f)};
-
-const APPS=[
- {n:'Files',i:'folder',r:(b,a)=>filesApp(b,a),w:640,h:380},
- {n:'Notes',i:'notes',r:(b,a)=>notesApp(b,a),w:520,h:360},
- {n:'Paint',i:'paint',r:(b)=>paintApp(b),w:920,h:600},
- {n:'Comet',i:'globe',r:(b,a)=>browserApp(b,a),w:920,h:580},
- {n:'Store',i:'store',r:(b)=>storeApp(b),w:760,h:520},
- {n:'Calculator',i:'calc',r:(b)=>calcApp(b),w:300,h:400},
- {n:'Trash',i:'trash',hide:true,r:(b)=>trashApp(b),w:540,h:380},
- {n:'Settings',i:'gear',r:(b,a)=>settingsApp(b,a),w:780,h:500}
-];
-function openApp(n,arg){
- const a=APPS.find(x=>x.n===n),path=arg&&arg[0]==='/';
- openWin(a,path?base(arg)||'This PC':a.n,Math.min(a.w,innerWidth-10),Math.min(a.h,innerHeight-100),b=>a.r(b,arg));
-}
-
-/* ================= Desktop ================= */
-function applyWall(){const u=U(),img=u.wallImg&&u.fs[u.wallImg];$('#os').style.background=img?`url("${img.d}") center/cover no-repeat`:WALLS[u.wall||0]}
-function renderDesk(){ // desktop shows app shortcuts plus everything saved in /Desktop
- if(!me)return;const fs=U().fs,files=Object.keys(fs).filter(p=>parent(p)==='/Desktop').sort();
- $('#icons').innerHTML=`<div class="ic" data-app="Trash">${ic((U().trash||[]).length?'trashfull':'trash',42)}Trash</div>`+APPS.filter(a=>!a.hide).slice(0,5).map(a=>`<div class="ic" data-app="${a.n}">${ic(a.i,42)}${a.n}</div>`).join('')+files.map(p=>`<div class="ic" data-p="${esc(p)}">${fileIcon(p,42)}${esc(label(p))}</div>`).join('');
-}
-function paintPins(){
- $('#pins').innerHTML=`<div class="tbtn" data-n="_s">${ic('win',dsz()-2)}</div>`+APPS.filter(a=>!a.hide).map(a=>{const w=(running[a.n]||[]).filter(e=>e.isConnected),act=w.some(e=>e.style.display!=='none'&&+e.style.zIndex===z);return`<div class="tbtn ${w.length?'run':''} ${act?'act':''}" data-n="${a.n}" title="${a.n}">${ic(a.i,dsz())}</div>`}).join('');
-}
-const closeAll=n=>[...(running[n]||[])].forEach(el=>$('.x',el).click());
-function boot(){
- $('#login').style.display='none';$('#os').style.display='block';applyWall();
- for(const k in running)delete running[k];$('#desk').querySelectorAll('.win').forEach(w=>w.remove());
- renderStart();ensureApps();
- renderDesk();paintPins();applySettings();
- if(S().autoUpdate)setTimeout(()=>checkUpdate(true),2500); // shows the update notification if a newer release exists
-}
-/* Desktop icons: one click selects, two clicks open */
-const sel1=(root,t)=>root.querySelectorAll('.sel').forEach(x=>x.classList.toggle('sel',x===t));
-$('#icons').onclick=e=>{const t=e.target.closest('.ic');$('#sm').style.display='none';if(!t)return sel1($('#icons'),null);
- sel1($('#icons'),null);t.classList.add('sel');
- dbl(t.dataset.app||t.dataset.p,()=>t.dataset.app?openApp(t.dataset.app):openPath(t.dataset.p))};
-$('#icons').oncontextmenu=e=>{const t=e.target.closest('.ic');
- if(t){sel1($('#icons'),null);t.classList.add('sel');menu(e,t.dataset.app?[['Open',()=>openApp(t.dataset.app)],...(t.dataset.app==='Trash'?[['Empty Trash',emptyTrash]]:[])]:itemMenu(t.dataset.p,openPath))}
- else menu(e,[['New folder',()=>newItem('/Desktop','d')],['New text document',()=>newItem('/Desktop','f')],'-',['Change background',()=>openApp('Settings','Personalization')],['Refresh',renderDesk],['Settings',()=>openApp('Settings')]])};
-/* Taskbar: one click launches an app, or shows/hides it if it is already open */
-$('#pins').onclick=e=>{const n=e.target.closest('[data-n]')?.dataset.n;if(!n)return;
- if(n==='_s'){const s=$('#sm');renderStart();placeSM();s.style.display=s.style.display==='block'?'none':'block';return}
- $('#sm').style.display='none';const w=(running[n]||[]).filter(x=>x.isConnected);
- if(!w.length)return openApp(n);
- const el=w[w.length-1];if(el.style.display==='none'||+el.style.zIndex<z){el.style.display='';el.style.zIndex=++z}else el.style.display='none';paintPins()};
-$('#pins').oncontextmenu=e=>{const n=e.target.closest('[data-n]')?.dataset.n;if(!n||n==='_s')return;menu(e,[['Open',()=>openApp(n)],['Close all windows',()=>closeAll(n)]])};
-$('#task').oncontextmenu=e=>menu(e,[['Settings',()=>openApp('Settings')]]);
-/* Start menu: one click opens an app */
-$('#sm').onclick=e=>{const am=e.target.closest('[data-amo]');if(am){$('#sm').style.display='none';return amoRun(am.dataset.amo)}const t=e.target.closest('[data-n]');if(!t)return;const n=t.dataset.n;
- if(n==='_out'){$('#sm').style.display='none';return logout()}
- $('#sm').style.display='none';openApp(n)};
-$('#sm').oncontextmenu=e=>{const n=e.target.closest('.g div')?.dataset.n;if(n)menu(e,[['Open',()=>{$('#sm').style.display='none';openApp(n)}]])};
-$('#desk').onpointerdown=()=>$('#sm').style.display='none';
-setInterval(tick,1000);
-function logout(){me=null;$('#dim').style.opacity=0;$('#night').style.opacity=0;const h=document.documentElement;h.dataset.hc=h.dataset.rm=h.dataset.bc='0';h.style.setProperty('--acc','#4cc2ff');h.style.setProperty('--fs','14px');$('#os').style.display='none';loginScreen()}
-
-/* ================= Sign-in and account setup ================= */
-function loginScreen(auto){const names=Object.keys(DB.users);if(names.length)lockScreen(names[0],auto&&names.length===1);else oobe(0)}
-function lockScreen(sel,auto){const bl=DB.users[sel].blank;if(auto&&bl){me=sel;return boot()}
- const L=$('#login'),names=Object.keys(DB.users),d=new Date();L.style.display='block';
- L.innerHTML=`<div class="center"><div style="font-size:64px;font-weight:300">${d.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}</div><div style="margin-bottom:34px;color:var(--dim)">${d.toLocaleDateString([],{weekday:'long',month:'long',day:'numeric'})}</div>
- <span class="av" style="width:110px;height:110px;font-size:46px">${esc(sel[0].toUpperCase())}</span><h2 style="font-weight:400;margin:12px 0">${esc(sel)}</h2>
- ${bl?'<button class="pri" id="si" style="width:140px;justify-content:center">Sign in</button>':'<div style="display:flex;gap:6px"><input id="pw" type="password" placeholder="Password" autofocus><button class="pri" id="si" style="width:44px;justify-content:center">→</button></div>'}
- <div style="margin-top:26px;display:flex;gap:8px;flex-wrap:wrap;justify-content:center">${names.filter(n=>n!==sel).map(n=>`<button data-u="${esc(n)}">${esc(n)}</button>`).join('')}<button data-u="_new">Add user</button></div></div>`;
- const go=async()=>{const u=DB.users[sel];if(u.blank||u.h===await sha($('#pw').value+sel)){me=sel;boot()}else toast('The password is incorrect. Try again.')};
- $('#si').onclick=go;if($('#pw'))$('#pw').onkeydown=e=>{if(e.key==='Enter')go()};
- L.onclick=e=>{const u=e.target.dataset.u;if(u)u==='_new'?oobe(0,true):lockScreen(u)};
-}
-/* Windows-style first-run setup: name, password, product key, finish */
-function oobe(step,canBack){
- const L=$('#login');L.style.display='block';L.onclick=null;
- const S=oobe.S=oobe.S||{name:'',pw:'',key:''};
- const nav=()=>`<div class="nav"><button id="bk">Back</button><button class="pri" id="nx">Next</button></div>`;
- const pages=[
-  `<h1>Let’s set up your device</h1><p>It only takes a minute. You’ll create an account, protect it with a password, and pick your storage plan.</p><div class="nav"><span><a href="#" id="rs">Restore from a backup</a>${canBack?' &nbsp;·&nbsp; <a href="#" id="cb">Back to sign in</a>':''}</span><button class="pri" id="nx">Get started</button></div>`,
-  `<h1>Who’s going to use this PC?</h1><p>Choose a name for your account.</p><input id="v" placeholder="User name" value="${esc(S.name)}">${nav()}`,
-  `<h1>Create a password</h1><p>You’ll use this to sign in. Leave it blank if you want to open your account instantly.</p><input id="v" type="password" placeholder="Password (optional)"><input id="v2" type="password" placeholder="Re-enter password">${nav()}`,
-  `<h1>Enter your product key</h1><p>A key sets your storage plan. Without one you’ll get ${DEFAULT_GB} GB. You can add one later in Settings.</p><input id="v" placeholder="XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX" value="${esc(S.key)}">${nav()}<p style="margin-top:14px"><a href="#" id="sk">Skip for now</a></p>`,
-  `<div style="text-align:center"><h1>Hi, ${esc(S.name)}</h1><p>We’re getting everything ready for you</p><div class="spin" style="margin:30px auto"></div></div>`
- ];
- L.innerHTML=`<div class="center"><div class="oobe">${step==='restore'?'<h1>Restore from a backup</h1><div id="imp"></div><div class="nav"><button id="bk">Back</button></div>':pages[step]}</div></div>`;
- const on=(id,f)=>{const e=$(id,L);if(e)e.onclick=ev=>{ev.preventDefault();f()}};
- if(step==='restore'){importBox($('#imp',L),()=>{oobe.S=null;loginScreen()});return on('#bk',()=>oobe(0,canBack))}
- on('#rs',()=>oobe('restore',canBack));on('#cb',()=>{oobe.S=null;lockScreen(Object.keys(DB.users)[0])});
- on('#bk',()=>oobe(step-1,canBack));
- const v=$('#v',L);if(v)v.focus();
- on('#sk',()=>{S.key='';oobe(4,canBack)});
- on('#nx',async()=>{
-  if(step===0)return oobe(1,canBack);
-  if(step===1){const n=v.value.trim();if(!n)return toast('Enter a name to continue');if(DB.users[n])return toast('That name is already in use');S.name=n;return oobe(2,canBack)}
-  if(step===2){if(v.value!==$('#v2',L).value)return toast('The passwords don’t match');S.pw=v.value;return oobe(3,canBack)}
-  if(step===3){S.key=v.value.trim().toLowerCase();if(S.key&&!KEYS[S.key])return toast('That product key isn’t valid.');oobe(4,canBack)}
- });
- if(step===4)setTimeout(async()=>{
-  DB.users[S.name]={h:await sha(S.pw+S.name),blank:!S.pw,gb:KEYS[S.key]||DEFAULT_GB,wall:0,fs:starterFS()};me=S.name;
-  if(!save()){delete DB.users[S.name];me=null;return oobe(1,canBack)}
-  oobe.S=null;boot();
- },2200);
-}
-/* Boot logo, then sign-in */
-$('#splash').innerHTML=ic('win',72)+'<div class="spin"></div>';
-loadDB().then(()=>setTimeout(()=>{$('#splash').style.display='none';loginScreen(true);try{localStorage.setItem('amogos.boot','ok')}catch(e){}},1000)); // 'ok' tells the patch loader this version started fine
-</script>
 <script>
-/* OS starter: runs the OS code above. It is skipped when the patch loader is starting an installed update. */
+"use strict";
+/* ============================================================
+   How this works
+   1. The real OS (AmogOs-Core.html) is NOT inside this file. It lives in the browser cache.
+   2. First start: download the newest OS from the GitHub release, save it in the cache, run it.
+   3. Every start after that: run the saved copy straight away (no download).
+   4. Updates: inside the OS, Settings > Update saves a newer copy to the same place. Next start runs it.
+   5. If a new version does not start in time, we go back to the last version that worked.
+   User data (accounts, files) lives in this page's browser storage, not in the OS file, so swapping
+   the OS never touches it.
+   ============================================================ */
 (function(){
- window.__amoStart=function(){
-  if(window.__amoSwapped||window.__amoStarted)return;
-  var m=document.getElementById('amogos-main');if(!m)return;
-  window.__amoStarted=true;
-  var s=document.createElement('script');s.text=m.textContent;document.body.appendChild(s);
- };
- if(!window.__amoHold)window.__amoStart(); // when an update is loading, the loader starts us later if it fails
+ var REPO='FallGameDev/OS.Lite';
+ var EDGE='https://mcqpodbwtwhjhkycwhzf.supabase.co/functions/v1/fetch-page';           // backup way to reach GitHub downloads
+ var RAW='https://raw.githubusercontent.com/'+REPO+'/main/AmogOs-Core.html';             // last-resort copy of the OS
+ var MAX=15,EST=8; // give up on a new version after MAX seconds; EST = guessed start time for the progress bar
+ var CK='amogos-update',CU='https://amogos.invalid/patch',CG='https://amogos.invalid/good'; // cache name + keys (same as the OS uses)
+ var L;try{L=localStorage}catch(e){L={getItem:function(){return null},setItem:function(){},removeItem:function(){}}}
+ function $(id){return document.getElementById(id)}
+ function secs(n){return n<=1?'less than a second':'about '+Math.ceil(n)+' seconds'}
+
+ /* ---------- the setup screen ---------- */
+ function ui(title,sub,f,eta){
+  $('t').textContent=title;$('s').textContent=sub||'';
+  $('b').style.width=(f==null?0:Math.round(f*100))+'%';
+  $('e').textContent=eta==null?'':secs(eta)+' left';
+ }
+
+ /* ---------- saving the OS: browser cache first, IndexedDB as the backup ----------
+    The OS file can be huge, so it never goes in localStorage (5 MB limit).
+    localStorage only keeps small notes: patchStore (where), releaseTag (version), releaseUrl, goodTag, boot. */
+ function idb(){return new Promise(function(ok,no){var r=indexedDB.open('amogos-update',1);r.onupgradeneeded=function(){r.result.createObjectStore('p')};r.onsuccess=function(){ok(r.result)};r.onerror=function(){no(r.error)}})}
+ function readStore(which){ // which = 'code' (the version to run) or 'good' (last version that started fine)
+  return Promise.resolve().then(function(){
+   var kind=L.getItem('amogos.patchStore');
+   if(kind==='cache')return caches.open(CK).then(function(c){return c.match(which==='good'?CG:CU)}).then(function(r){return r?r.text():null});
+   if(kind==='idb')return idb().then(function(db){return new Promise(function(ok,no){var q=db.transaction('p').objectStore('p').get(which);q.onsuccess=function(){var v=q.result||null;db.close();ok(v)};q.onerror=function(){db.close();no(q.error)}})});
+   return null;
+  });
+ }
+ function writeStore(which,text){
+  var kind=L.getItem('amogos.patchStore');
+  function toCache(){return caches.open(CK).then(function(c){return c.put(which==='good'?CG:CU,new Response(text,{headers:{'Content-Type':'text/html'}}))}).then(function(){L.setItem('amogos.patchStore','cache')})}
+  function toIdb(){return idb().then(function(db){return new Promise(function(ok,no){var t=db.transaction('p','readwrite');t.objectStore('p').put(text,which);t.oncomplete=function(){db.close();ok()};t.onerror=function(){db.close();no(t.error)}})}).then(function(){L.setItem('amogos.patchStore','idb')})}
+  if(kind==='idb')return toIdb();
+  if(kind==='cache')return toCache();
+  return Promise.resolve().then(toCache).catch(toIdb); // first save: try the cache, else IndexedDB
+ }
+ function wipe(){
+  ['amogos.releaseUrl','amogos.releaseTag','amogos.patchStore','amogos.patchCode','amogos.goodTag','amogos.badTag','amogos.boot'].forEach(function(k){L.removeItem(k)});
+  try{caches.delete(CK)}catch(e){}try{indexedDB.deleteDatabase('amogos-update')}catch(e){}
+ }
+
+ /* ---------- downloading the newest OS ---------- */
+ function readBody(r,total,prog){ // read the download piece by piece so we can show progress
+  if(!r.body||!r.body.getReader)return r.text();
+  var rd=r.body.getReader(),dec=new TextDecoder(),got=0,out='';
+  total=total||+r.headers.get('content-length')||0;
+  return (function pump(){return rd.read().then(function(x){
+   if(x.done)return out+dec.decode();
+   got+=x.value.length;out+=dec.decode(x.value,{stream:true});prog(got,total);return pump();
+  })})();
+ }
+ function tryDownload(list,size,prog){ // tries each address in turn until one gives a real OS file
+  var i=0;
+  function next(){
+   if(i>=list.length)return Promise.reject(new Error('download'));
+   var o=list[i++];
+   return fetch(o.u,{headers:o.h||{}}).then(function(r){if(!r.ok)throw 0;return readBody(r,size,prog)})
+    .then(function(t){if(!/<html/i.test(t)||!/amogos/i.test(t)||t.length<20000)throw 0;return t}).catch(next);
+  }
+  return next();
+ }
+ function latest(prog){ // find the newest release, then download its OS file
+  return fetch('https://api.github.com/repos/'+REPO+'/releases/latest',{headers:{Accept:'application/vnd.github+json'}})
+   .then(function(r){if(!r.ok)throw 0;return r.json()})
+   .then(function(j){
+    var as=j.assets||[],a=as.find(function(x){return /core.*\.html?$/i.test(x.name)});
+    if(!a)throw 0;
+    return tryDownload([
+     {u:a.url,h:{Accept:'application/octet-stream'}},                     // GitHub API (allows browser downloads)
+     {u:EDGE+'?url='+encodeURIComponent(a.browser_download_url)},         // through the Supabase page fetcher
+     {u:a.browser_download_url}                                           // direct (often blocked by the browser)
+    ],a.size,prog).then(function(code){return{code:code,url:a.browser_download_url}});
+   })
+   .catch(function(){return tryDownload([{u:RAW}],0,prog).then(function(code){return{code:code,url:RAW}})}); // fall back to the copy on main
+ }
+ function versionOf(code){var m=code.match(/name="amogos-version"\s+content="([^"]+)"/);return m?m[1]:'0'}
+
+ /* ---------- running the OS inside a full-screen frame ---------- */
+ var frame=null;
+ function run(code,tag){
+  L.setItem('amogos.boot','pending'); // the OS flips this to "ok" once it has started
+  if(frame)frame.remove();
+  frame=document.createElement('iframe');frame.id='h';
+  frame.setAttribute('allow','autoplay; fullscreen; gamepad; clipboard-write; pointer-lock; microphone; camera');
+  document.body.insertBefore(frame,$('u'));
+  frame.srcdoc=code;
+  var t0=Date.now();ui('Starting AmogOs '+tag,'',0,EST);
+  var iv=setInterval(function(){
+   var el=(Date.now()-t0)/1000;
+   if(L.getItem('amogos.boot')==='ok'){ // the OS says it started fine
+    clearInterval(iv);ui('Ready!','AmogOs '+tag,1,null);
+    setTimeout(function(){$('u').style.opacity='0';setTimeout(function(){$('u').style.display='none'},500)},600);
+    if(L.getItem('amogos.goodTag')!==tag)writeStore('good',code).then(function(){L.setItem('amogos.goodTag',tag)},function(){}); // remember: this version works
+    return;
+   }
+   if(el>MAX){clearInterval(iv);failed(tag);return}
+   ui('Starting AmogOs '+tag,'Almost there…',Math.min(.95,el/EST),Math.max(1,EST-el));
+  },200);
+ }
+ function failed(tag){ // a version did not start: go back to the last one that did
+  var good=L.getItem('amogos.goodTag');
+  ui('That version did not start','Going back to the last version that worked…',1,null);
+  if(good&&good!==tag){
+   L.setItem('amogos.badTag',tag);
+   readStore('good').then(function(g){
+    if(!g)throw 0;
+    L.setItem('amogos.releaseTag',good);
+    return writeStore('code',g).then(function(){run(g,good)});
+   }).catch(function(){gaveUp('No older version was saved.')});
+  }else gaveUp('This version could not start.');
+ }
+ function gaveUp(why){ // nothing left to try: say so, with a button
+  ui('AmogOs could not start',why,0,null);
+  $('x').style.display='block';$('x').textContent='Version '+(L.getItem('amogos.releaseTag')||'unknown')+'. Pressing Try again downloads a fresh copy. Your accounts and files are kept.';
+  var r=$('r');r.style.display='block';r.onclick=function(){wipe();location.reload()};
+ }
+
+ /* ---------- first start: download, save, run ---------- */
+ function firstRun(){
+  var t0=Date.now();
+  ui('Setting up your PC','Finding the newest AmogOs…',0,null);
+  latest(function(got,total){
+   var f=total?Math.min(1,got/total):0,el=(Date.now()-t0)/1000;
+   ui('Setting up your PC','Downloading AmogOs…',f*.8,f>.03?(el/f-el)+3:null);
+  }).then(function(r){
+   var tag=versionOf(r.code);
+   ui('Setting up your PC','Saving it on this device…',.85,2);
+   return writeStore('code',r.code).catch(function(){}) // if saving fails we still run it, but must download again next time
+    .then(function(){L.setItem('amogos.releaseTag',tag);L.setItem('amogos.releaseUrl',r.url);run(r.code,tag)});
+  }).catch(function(){
+   ui('Could not set up your PC','AmogOs needs the internet the first time it starts. Check your connection and try again.',0,null);
+   var b=$('r');b.style.display='block';b.onclick=function(){b.style.display='none';firstRun()};
+  });
+ }
+
+ /* ---------- start ---------- */
+ readStore('code').catch(function(){return null}).then(function(code){
+  if(code&&code.length>20000)run(code,L.getItem('amogos.releaseTag')||versionOf(code));
+  else firstRun();
+ });
 })();
 </script>
 </body>
