@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>AmogOs</title>
-<meta name="amogos-version" content="1.2.0">
+<meta name="amogos-version" content="1.3.0">
 <script>
 /* ===== Patch loader =====
    The version of this file is the meta tag above (the ONLY place to change it for a release).
@@ -235,11 +235,75 @@ input[type=range]{padding:0;border:0;background:none;accent-color:var(--acc)}
 .uprog{height:8px;background:#ffffff26;border-radius:4px;overflow:hidden;margin:0 0 12px}.uprog i{display:block;height:100%;width:0;background:var(--acc);transition:width .2s}
 .unote{position:fixed;top:14px;right:14px;z-index:99999995;width:290px;background:var(--sf);border:1px solid var(--bd);border-radius:12px;padding:14px;box-shadow:0 12px 36px #0009}
 </style>
+<style>
+/* ----- Music app ----- */
+.mu{position:absolute;inset:0;display:flex;background:var(--bg)}
+.mu .lib{width:240px;flex:none;display:flex;flex-direction:column;border-right:1px solid var(--bd);background:#242424}
+.mu .hd{display:flex;gap:6px;align-items:center;padding:8px;border-bottom:1px solid var(--bd)}
+.mu .lst{flex:1;overflow:auto}
+.mu .sh{padding:8px 10px 4px;font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em}
+.mu .em{padding:10px;color:var(--dim);font-size:13px}
+.mu .sg{display:flex;gap:9px;align-items:center;padding:7px 10px;cursor:pointer;border-bottom:1px solid #ffffff0d}
+.mu .sg:hover{background:#ffffff12}
+.mu .sg.on{background:#ffffff1f;color:var(--acc)}
+.mu .sg small{display:block;color:var(--dim)}
+.mu .ell{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mu .nt{width:22px;height:22px;flex:none;display:flex}
+.mu .np{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:14px}
+.mu .disc{position:relative;width:140px;height:140px;display:flex;align-items:center;justify-content:center}
+.mu .ring{position:absolute;inset:0;border-radius:50%;background:conic-gradient(var(--acc),#8b5cf6,#ec4899,var(--acc));box-shadow:0 8px 30px #0009}
+.mu .disc svg{position:relative}
+.mu .disc.spin .ring{animation:muSpin 6s linear infinite}
+@keyframes muSpin{to{transform:rotate(360deg)}}
+html[data-rm="1"] .mu .disc.spin .ring{animation:none}
+.mu .mt{font-size:18px;font-weight:600;max-width:100%;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mu .ms{color:var(--dim);margin-top:-6px}
+.mu canvas{width:100%;max-width:380px;height:64px}
+.mu .sk{display:flex;gap:8px;align-items:center;width:100%;max-width:380px;color:var(--dim);font-size:12px}
+.mu .sk input{flex:1}
+.mu .ctl{display:flex;gap:8px;align-items:center}
+.mu .ctl button{min-width:42px;justify-content:center}
+.mu .vl{display:flex;gap:8px;align-items:center;color:var(--dim)}
+.mu input[type=range]{accent-color:var(--acc)}
+@media(max-width:600px){.mu{flex-direction:column}.mu .lib{width:auto;height:38%;border-right:0;border-bottom:1px solid var(--bd)}}
+</style>
+<style>
+/* ----- Window resize handles: thin strips on every edge and corner (hidden while maximized) ----- */
+.rz{position:absolute;z-index:6;touch-action:none}
+.rz[data-d=n],.rz[data-d=s]{left:10px;right:10px;height:6px;cursor:ns-resize}
+.rz[data-d=e],.rz[data-d=w]{top:10px;bottom:10px;width:6px;cursor:ew-resize}
+.rz[data-d=n]{top:0}.rz[data-d=s]{bottom:0}.rz[data-d=e]{right:0}.rz[data-d=w]{left:0}
+.rz[data-d=ne],.rz[data-d=nw],.rz[data-d=se],.rz[data-d=sw]{width:12px;height:12px}
+.rz[data-d=ne]{top:0;right:0;cursor:nesw-resize}.rz[data-d=sw]{bottom:0;left:0;cursor:nesw-resize}
+.rz[data-d=nw]{top:0;left:0;cursor:nwse-resize}.rz[data-d=se]{bottom:0;right:0;cursor:nwse-resize}
+.win.max .rz{display:none}
+</style>
+<style>
+/* ----- Top bar (like the macOS menu bar). Off by default. --tbh is its height, 0 when it is off, so the desktop and dock make room for it. ----- */
+#topbar{display:none}
+#os[data-tb="1"]{--tbh:28px}
+#os[data-tb="1"] #topbar{display:flex;position:absolute;top:0;left:0;right:0;height:var(--tbh);align-items:center;gap:2px;padding:0 8px;background:#1b1b1be6;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom:1px solid var(--bd);z-index:2000000;font-size:calc(var(--fs) - 1px);user-select:none}
+#topbar button{background:none;border:0;box-shadow:none;color:inherit;font:inherit;height:22px;padding:0 9px;border-radius:5px;display:inline-flex;align-items:center;gap:6px}
+#topbar button:hover{background:#ffffff22}
+#topbar .tb-app{font-weight:700;padding:0 9px}
+#topbar .av{width:18px;height:18px;font-size:10px}
+#tbclock{margin:0 6px 0 4px;white-space:nowrap}
+#os[data-clock="0"] #tbclock{display:none}
+#os[data-clockat=topbar] #tray{display:none}
+/* the dock and the desktop start below the top bar. A dock at the top sits under it, never over it. */
+#os[data-tb="1"][data-dock=bottom] #desk{inset:var(--tbh) 0 var(--tk) 0}
+#os[data-tb="1"][data-dock=top] #desk{inset:calc(var(--tk) + var(--tbh)) 0 0 0}
+#os[data-tb="1"][data-dock=top] #task{top:var(--tbh)}
+#os[data-tb="1"][data-dock=left] #desk{inset:var(--tbh) 0 0 var(--tk)}
+#os[data-tb="1"][data-dock=right] #desk{inset:var(--tbh) var(--tk) 0 0}
+#os[data-tb="1"][data-dock=left] #task,#os[data-tb="1"][data-dock=right] #task{top:var(--tbh)}
+</style>
 </head>
 <body>
 <div id="splash"></div>
 <div id="login"></div>
 <div id="os" data-dock="bottom">
+  <div id="topbar"></div>
   <div id="desk"><div id="icons"></div></div>
   <div id="sm"></div>
   <div id="task"><div id="pins" style="display:flex;gap:4px"></div><div id="tray"></div></div>
@@ -255,9 +319,9 @@ const $=(s,e=document)=>e.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const enc=new TextEncoder(),dec=new TextDecoder();
 /* ----- Settings store: per-user, with defaults ----- */
-const OS_VERSION=(document.querySelector('meta[name=amogos-version]')||{}).content||'1.2.0',OS_REPO='FallGameDev/OS.Lite'; // the version is the <meta name=amogos-version> tag at the top of this file
+const OS_VERSION=(document.querySelector('meta[name=amogos-version]')||{}).content||'1.3.0',OS_REPO='FallGameDev/OS.Lite'; // the version is the <meta name=amogos-version> tag at the top of this file
 const STORE_RAW='https://raw.githubusercontent.com/FallGameDev/OS.Lite/main/apps/'; // app packages live in the apps folder of OS.Lite
-const DEF={device:'AMOG-PC',h24:false,secs:false,dfmt:'short',confirmDel:false,maxWin:false,brightness:100,scale:100,night:false,nightAmt:30,sounds:true,volume:60,dock:'bottom',dockSize:'m',align:'center',autohide:false,clock:true,showStart:true,textSize:14,hc:false,rm:false,bigcur:false,filter:'none',notif:true,dur:3,accent:'#4cc2ff',engine:'google',edgeUrl:'https://mcqpodbwtwhjhkycwhzf.supabase.co/functions/v1/fetch-page',edgeKey:'',proxy:'',storeSrc:'',startApps:true,autoUpdate:true};
+const DEF={device:'AMOG-PC',h24:false,secs:false,dfmt:'short',confirmDel:false,maxWin:false,brightness:100,scale:100,night:false,nightAmt:30,sounds:true,volume:60,dock:'bottom',dockSize:'m',align:'center',autohide:false,clock:true,showStart:true,textSize:14,hc:false,rm:false,bigcur:false,filter:'none',notif:true,dur:3,accent:'#4cc2ff',engine:'google',edgeUrl:'https://mcqpodbwtwhjhkycwhzf.supabase.co/functions/v1/fetch-page',edgeKey:'',proxy:'',storeSrc:'',startApps:true,autoUpdate:true,topbar:false,clockAt:'topbar'};
 const S=()=>Object.assign({},DEF,me&&U()?U().set:{});
 const DS={s:22,m:26,l:32},dsz=()=>DS[S().dockSize]||26;
 const ACC=['#4cc2ff','#8b5cf6','#ec4899','#f97316','#22c55e','#eab308','#ef4444'];
@@ -292,10 +356,11 @@ const IC={
  cloud:P('<path fill="#60a5fa" d="M14 38a10 10 0 0 1-1-20 12 12 0 0 1 23 3 8.5 8.5 0 0 1-1 17z"/>'),
  key:P('<circle cx="16" cy="24" r="10" fill="#facc15"/><circle cx="16" cy="24" r="4" fill="#92400e"/><path fill="#eab308" d="M24 21h20v6h-4v5h-5v-5h-11z"/>'),
  brush:P('<path fill="#a855f7" d="M40 4c3 0 5 2 4 5L28 28l-7-7z"/><path fill="#ec4899" d="M19 24l5 5c0 7-5 13-14 13 3-3 2-6 2-8 0-5 3-10 7-10z"/>'),
- power:P('<path fill="none" stroke="#f87171" stroke-width="5" stroke-linecap="round" d="M24 6v16M13 13a16 16 0 1 0 22 0"/>')
+ power:P('<path fill="none" stroke="#f87171" stroke-width="5" stroke-linecap="round" d="M24 6v16M13 13a16 16 0 1 0 22 0"/>'),
+ music:P('<rect x="4" y="4" width="40" height="40" rx="11" fill="#ec4899"/><path fill="#fff" d="M20 13l16-4v21a5.5 5.5 0 1 1-3-4.9V15.5l-10 2.5v16a5.5 5.5 0 1 1-3-4.9z"/>')
 };
 const ic=(n,s=24)=>`<span class="i" style="width:${s}px;height:${s}px">${IC[n]}</span>`;
-const typeIcon=r=>r.t==='d'?'folder':r.m.startsWith('image')?'image':'doc';
+const typeIcon=r=>r.t==='d'?'folder':r.m.startsWith('image')?'image':r.m.startsWith('audio')?'music':'doc';
 
 /* Product keys: each UUID unlocks a storage size in GB */
 const KEYS={
@@ -307,8 +372,9 @@ const KEYS={
 };
 const DEFAULT_GB=16, SYS=6e9, SCALE=300;
 
-let tt;function toast(m){const s=S();if(me&&!s.notif&&!/isn’t|couldn’t|can’t|don’t|full|incorrect|already|Enter |Choose |Select|Name the/i.test(m))return;const t=$('#toast');t.textContent=m;t.style.display='block';clearTimeout(tt);tt=setTimeout(()=>t.style.display='none',s.dur*1000)}
+let tt;function toast(m){const s=S(),bad=/isn’t|couldn’t|can’t|don’t|full|incorrect|already|Enter |Choose |Select|Name the/i.test(m);if(me&&!s.notif&&!bad)return;if(!/^Moved to Trash/.test(m))sfx(bad?'error':/installed/i.test(m)?'install':'notify'); /* sound first, then show the message */ const t=$('#toast');t.textContent=m;t.style.display='block';clearTimeout(tt);tt=setTimeout(()=>t.style.display='none',s.dur*1000)}
 function ask(msg,def){ // def===null: yes/no, otherwise text prompt
+ sfx('ask');
  return new Promise(res=>{
   const m=document.createElement('div');m.className='modal';
   m.innerHTML=`<div class="dlg"><p style="margin-top:0">${msg}</p>${def===null?'':'<input id="ai" style="width:100%">'}<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px"><button class="pri" id="ok">OK</button><button id="no">Cancel</button></div></div>`;
@@ -317,7 +383,62 @@ function ask(msg,def){ // def===null: yes/no, otherwise text prompt
   $('#ok',m).onclick=()=>done(def===null?true:i.value);$('#no',m).onclick=()=>done(def===null?false:null);
  });
 }
-function beep(){const s=S();if(!s.sounds)return;try{const a=new(window.AudioContext||window.webkitAudioContext)(),o=a.createOscillator(),g=a.createGain();o.frequency.value=660;g.gain.value=.06*s.volume/100;o.connect(g);g.connect(a.destination);o.start();o.stop(a.currentTime+.05)}catch(e){}}
+/* ================= Sound effects =================
+   Every sound is made live with the Web Audio API, so there are no audio files to download.
+   sfx('name') plays one of the sounds in the SFX table below. It respects Settings > Sound (on/off and volume).
+   tone() makes one musical note and noise() makes a burst of filtered noise. Every sound is built from those two. */
+let AC=null,MASTER=null,NB=null; // AC: the shared audio context, MASTER: volume for system sounds, NB: a buffer of noise
+function audioCtx(){ // one shared context (browsers only allow sound after the first click, so it is made on demand)
+ if(!AC){const C=window.AudioContext||window.webkitAudioContext;if(!C)return null;AC=new C();MASTER=AC.createGain();MASTER.connect(AC.destination)}
+ if(AC.state==='suspended')AC.resume();
+ return AC;
+}
+/* One note: frequency f, starts at time t, lasts d seconds, wave type, loudness v. "to" slides the pitch to a new frequency. */
+function tone(f,t,d,type,v,to,dest){
+ const o=AC.createOscillator(),g=AC.createGain();o.type=type||'sine';o.frequency.setValueAtTime(f,t);
+ if(to)o.frequency.exponentialRampToValueAtTime(to,t+d);
+ g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(v,t+.008);g.gain.exponentialRampToValueAtTime(.0001,t+d); // quick fade in, smooth fade out (no clicks)
+ o.connect(g);g.connect(dest||MASTER);o.start(t);o.stop(t+d+.03);
+}
+/* A burst of noise through a filter that sweeps from f0 to f1 (good for swooshes, crumples and hi-hats). */
+function noise(t,d,v,f0,f1,dest){
+ if(!NB){NB=AC.createBuffer(1,AC.sampleRate,AC.sampleRate);const a=NB.getChannelData(0);for(let i=0;i<a.length;i++)a[i]=Math.random()*2-1}
+ const s=AC.createBufferSource(),fl=AC.createBiquadFilter(),g=AC.createGain();
+ s.buffer=NB;s.loop=true;fl.type='bandpass';fl.frequency.setValueAtTime(f0,t);if(f1)fl.frequency.exponentialRampToValueAtTime(f1,t+d);
+ g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(.0001,t+d);
+ s.connect(fl);fl.connect(g);g.connect(dest||MASTER);s.start(t);s.stop(t+d+.02);
+}
+/* The sound table. Each entry gets the current audio time t. Add a new sound by adding a line here. */
+const SFX={
+ open:t=>{tone(523,t,.12,'sine',.5);tone(784,t+.07,.18,'sine',.5)},                 // window opens: two rising notes
+ close:t=>{tone(784,t,.1,'sine',.4);tone(523,t+.06,.14,'sine',.4)},                 // window closes: two falling notes
+ min:t=>{tone(700,t,.14,'triangle',.4,350);noise(t,.1,.15,2500,600)},               // minimize: swoosh down
+ max:t=>{tone(350,t,.14,'triangle',.4,700);noise(t,.1,.15,600,2500)},               // maximize: swoosh up
+ click:t=>tone(1100,t,.03,'triangle',.35),                                          // button click
+ tick:t=>tone(1500,t,.025,'square',.12),                                            // calculator keys and switches
+ pop:t=>tone(420,t,.06,'sine',.4,720),                                              // a menu appears
+ start:t=>{tone(440,t,.12,'sine',.4);tone(660,t+.05,.14,'sine',.4)},                // Start menu
+ notify:t=>{tone(988,t,.14,'sine',.5);tone(1319,t+.1,.26,'sine',.5)},               // normal message (ding-ding)
+ error:t=>{tone(220,t,.16,'sawtooth',.35,150);tone(165,t+.14,.22,'sawtooth',.35,110)}, // something went wrong (low buzz)
+ ask:t=>{tone(587,t,.12,'triangle',.45);tone(784,t+.12,.16,'triangle',.45)},        // a question box appears
+ ok:t=>{[523,659,784].forEach((f,i)=>tone(f,t+i*.06,.14,'triangle',.4))},           // success
+ install:t=>{[659,784,988,1319].forEach((f,i)=>tone(f,t+i*.07,.2,'sine',.45))},     // app installed (sparkly run)
+ trash:t=>{noise(t,.22,.5,1800,400);tone(140,t,.12,'square',.15,70)},               // moved to the Trash (crumple)
+ restore:t=>{tone(330,t,.16,'sine',.45,880);tone(1175,t+.12,.12,'sine',.3)},        // restored from the Trash
+ empty:t=>{noise(t,.5,.6,2200,250);noise(t+.12,.35,.4,1500,300);tone(110,t,.3,'sawtooth',.12,50)}, // Trash emptied (big crumple)
+ startup:t=>{[392,523,659,784,1047].forEach((f,i)=>tone(f,t+i*.11,.7-i*.05,'sine',.4))}, // signing in: rising chord
+ shutdown:t=>{[784,659,523,392].forEach((f,i)=>tone(f,t+i*.12,.5,'sine',.4))}       // signing out: falling chord
+};
+const lastSfx={}; // when each sound last played, so a burst of the same sound (like closing 10 windows) does not turn into a buzz
+function sfx(n){
+ const s=S();if(!s.sounds||!SFX[n])return;
+ const now=performance.now();if(lastSfx[n]&&now-lastSfx[n]<45)return;lastSfx[n]=now;
+ try{const ac=audioCtx();if(!ac)return;MASTER.gain.value=.5*s.volume/100;SFX[n](ac.currentTime)}catch(e){}
+}
+const beep=()=>sfx('open'); // older code calls beep(), keep it working
+/* Small sounds for every button press and switch toggle. Title bar buttons, calculator keys and the sound previews have their own sounds. */
+document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('button');if(b&&!b.closest('.tb,.cb')&&!b.dataset.snd)sfx('click')},true);
+document.addEventListener('change',e=>{if(e.target.type==='checkbox')sfx('tick')},true);
 
 /* ----- Double-click helper: the 2nd click on the same thing within 0.5s counts (works on touch too) ----- */
 let lt=0,lk=null;function dbl(key,fn){const n=Date.now();if(lk===key&&n-lt<500){lk=null;fn();return true}lk=key;lt=n;return false}
@@ -325,10 +446,10 @@ let lt=0,lk=null;function dbl(key,fn){const n=Date.now();if(lk===key&&n-lt<500){
 /* ----- Right-click context menu: items are [label, fn] or '-' ----- */
 const cm=$('#cm');
 function menu(e,items){
- e.preventDefault();e.stopPropagation();
+ e.preventDefault();e.stopPropagation();sfx('pop');
  cm.innerHTML=items.map((it,i)=>it==='-'?'<hr>':`<div data-k="${i}">${esc(it[0])}</div>`).join('');cm.style.display='block';
  cm.style.left=Math.min(e.clientX,innerWidth-cm.offsetWidth-6)+'px';cm.style.top=Math.min(e.clientY,innerHeight-cm.offsetHeight-6)+'px';
- cm.onclick=ev=>{const k=ev.target.dataset.k;if(k==null)return;cm.style.display='none';items[k][1]()};
+ cm.onclick=ev=>{const k=ev.target.dataset.k;if(k==null)return;cm.style.display='none';sfx('click');items[k][1]()};
 }
 addEventListener('pointerdown',e=>{if(!cm.contains(e.target))cm.style.display='none'},true);
 addEventListener('keydown',e=>{if(e.key==='Escape')cm.style.display='none'});
@@ -374,7 +495,7 @@ function put(p,rec){
  if(!save()){old?fs[p]=old:delete fs[p];made.forEach(d=>delete fs[d]);return false}
  return true;
 }
-const starterFS=()=>({'/Desktop':{t:'d'},'/Documents':{t:'d'},'/Pictures':{t:'d'},'/Downloads':{t:'d'},'/Applications':{t:'d'},
+const starterFS=()=>({'/Desktop':{t:'d'},'/Documents':{t:'d'},'/Pictures':{t:'d'},'/Downloads':{t:'d'},'/Applications':{t:'d'},'/Music':{t:'d'},
  '/Documents/Welcome.txt':{t:'f',m:'text/plain',d:toData('Welcome to AmogOs!\n\nRight-click anywhere to see options. Double-click icons to open them.')}});
 function download(name,url){const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove()}
 
@@ -404,7 +525,7 @@ const textOf=d=>{try{return fromData(d)}catch(e){return atob(d.split(',')[1])}};
 const amoMetaC={};
 function amoMeta(p){ // name and icon only, cached so the desktop and Files stay fast
  const r=U().fs[p];if(!r)return null;const k=p+':'+r.d.length;
- if(!(k in amoMetaC)){try{const o=JSON.parse(atob(r.d.split(',')[1]));amoMetaC[k]={name:o.name,icon:o.icon}}catch(e){amoMetaC[k]=null}}
+ if(!(k in amoMetaC)){try{const o=JSON.parse(atob(r.d.split(',')[1]));amoMetaC[k]={name:o.name,icon:o.icon,id:o.id}}catch(e){amoMetaC[k]=null}}
  return amoMetaC[k];
 }
 function amoBuild(pkg){ // turns the package into one page: inlines css/js and swaps file paths for data URLs
@@ -420,7 +541,7 @@ function amoBuild(pkg){ // turns the package into one page: inlines css/js and s
 }
 function amoRun(p){
  let pkg;try{pkg=JSON.parse(atob(U().fs[p].d.split(',')[1]));if(pkg.amo!==1||!pkg.files)throw 0}catch(e){return toast('That app package couldn’t be opened.')}
- openWin({n:'App:'+(pkg.id||pkg.name),i:'app',img:pkg.icon},pkg.name||base(p),Math.min(pkg.width||900,innerWidth-10),Math.min(pkg.height||560,innerHeight-100),b=>{
+ openWin({n:'App:'+(pkg.id||pkg.name),i:'app',img:pkg.icon,pin:'amo:'+p},pkg.name||base(p),Math.min(pkg.width||900,innerWidth-10),Math.min(pkg.height||560,innerHeight-100),b=>{
   b.innerHTML='<div class="fill" style="align-items:center;justify-content:center;background:#000"><div class="spin"></div></div>';
   setTimeout(()=>{try{const w=document.createElement('div');w.className='fill';const f=document.createElement('iframe');f.style.cssText='flex:1;border:0;background:#000';f.setAttribute('sandbox','allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-pointer-lock');f.dataset.amo='1';f.setAttribute('allow','autoplay;fullscreen;gamepad;clipboard-write;pointer-lock');f.srcdoc=amoBuild(pkg);f.addEventListener('load',()=>{try{f.contentWindow.focus()}catch(e){}});w.appendChild(f);b.innerHTML='';b.appendChild(w)}catch(e){toast('This app couldn’t start.')}},60);
  });
@@ -431,7 +552,7 @@ const trashList=()=>U().trash=U().trash||[];
 function toTrash(p){
  const fs=U().fs,items={};Object.keys(fs).forEach(k=>{if(k===p||k.startsWith(p+'/')){items[k]=fs[k];delete fs[k]}});
  trashList().push({id:Date.now()+'-'+Math.random().toString(36).slice(2),name:base(p),from:p,items});
- save();refreshAll();applyWall();toast('Moved to Trash');
+ save();refreshAll();applyWall();sfx('trash');toast('Moved to Trash');
 }
 const delItem=async p=>{if(S().confirmDel&&!await ask('Move “'+esc(base(p))+'” to the Trash?',null))return;toTrash(p)};
 function restoreItem(id){
@@ -439,17 +560,17 @@ function restoreItem(id){
  if(fs[to]){const n=base(to),d=n.lastIndexOf('.');to=join(parent(to),d>0?n.slice(0,d)+' (restored)'+n.slice(d):n+' (restored)')}
  for(let d=parent(to);d!=='/'&&!fs[d];d=parent(d))fs[d]={t:'d'};
  Object.keys(x.items).forEach(k=>fs[to+k.slice(x.from.length)]=x.items[k]);
- t.splice(i,1);save();refreshAll();applyWall();
+ t.splice(i,1);save();refreshAll();applyWall();sfx('restore');
 }
 async function purge(id){
  const t=trashList(),i=t.findIndex(x=>x.id===id);if(i<0)return;
  if(!await ask('Delete “'+esc(t[i].name)+'” forever? This can’t be undone.',null))return;
- t.splice(i,1);save();refreshAll();
+ t.splice(i,1);save();refreshAll();sfx('empty');
 }
 async function emptyTrash(){
  const t=trashList();if(!t.length)return toast('The Trash is already empty');
  if(!await ask('Permanently delete all '+t.length+' items in the Trash?',null))return;
- U().trash=[];save();refreshAll();
+ U().trash=[];save();refreshAll();sfx('empty');
 }
 function trashApp(b){
  const draw=()=>{const t=trashList();
@@ -469,6 +590,7 @@ function openFile(p){
  else if(isAmo(p))amoOpen(p);
  else if(isHtml(p))openApp('Comet',p);
  else if(r.m.startsWith('text'))openApp('Notes',p);
+ else if(r.m.startsWith('audio'))openApp('Music',p); // songs play in the Music app
  else if(r.m.startsWith('image'))openWin({n:'Viewer',i:'image'},n,480,340,b=>{b.innerHTML=`<div class="fill" style="align-items:center;justify-content:center;background:#111"><img src="${r.d}" style="max-width:100%;max-height:100%"></div>`;b.oncontextmenu=e=>menu(e,[['Set as desktop background',()=>setWall(p)],['Download',()=>download(n,r.d)]])});
  else download(n,r.d);
 }
@@ -492,7 +614,7 @@ function amoOpen(p){ // opening an app file moves it into Applications, then run
 }
 function renderStart(){ // Start menu: built-in apps plus everything in Applications
  if(!me)return;const inst=Object.keys(U().fs).filter(p=>parent(p)===APPDIR&&isAmo(p)).sort();
- $('#sm').innerHTML=`<div class="g">${APPS.filter(a=>!a.hide).map(a=>`<div data-n="${a.n}">${ic(a.i,36)}${a.n}</div>`).join('')}${S().startApps?inst.map(p=>`<div data-amo="${esc(p)}">${fileIcon(p,36)}${esc(((amoMeta(p)||{}).name||base(p)).slice(0,14))}</div>`).join(''):''}</div><div class="ft"><span><span class="av">${esc(me[0].toUpperCase())}</span> &nbsp;${esc(me)}</span><button data-n="_out">${ic('power',16)} Sign out</button></div>`;
+ $('#sm').innerHTML=`<div class="g">${APPS.filter(a=>!a.hide).map(a=>`<div data-n="${a.n}">${ic(a.i,36)}${a.n}</div>`).join('')}${S().startApps?inst.map(p=>`<div data-amo="${esc(p)}">${fileIcon(p,36)}${esc(((amoMeta(p)||{}).name||base(p)).slice(0,14))}</div>`).join(''):''}</div><div class="ft"><span>${avHtml(me,36)} &nbsp;${esc(me)}</span><button data-n="_out">${ic('power',16)} Sign out</button></div>`;
 }
 function fileIcon(p,s){ // picture thumbnails, app icons, shortcut arrows, otherwise a colored type icon
  const r=U().fs[p],lt=isLnk(p)?r.d:null,tp=lt&&U().fs[lt]?lt:(isAmo(p)?p:null),m=tp?amoMeta(tp):null,src=r.m&&r.m.startsWith('image')?r.d:m&&m.icon;
@@ -505,23 +627,51 @@ function itemMenu(p,openFn){
 }
 
 /* ================= Window manager ================= */
-let z=10,off=0;const running={};
+let z=10,off=0;const running={},dockInfo={};
+/* Resizing: 8 invisible handles (4 edges, 4 corners). Dragging one changes the size, and the top or left ones also move the window.
+   setPointerCapture keeps the drag working when the mouse passes over an app that runs in a frame. */
+function addResizers(el){
+ ['n','s','e','w','ne','nw','se','sw'].forEach(d=>{
+  const h=document.createElement('div');h.className='rz';h.dataset.d=d;el.appendChild(h);
+  let st=null;
+  h.onpointerdown=e=>{
+   if(el.classList.contains('max'))return;
+   e.stopPropagation();h.setPointerCapture(e.pointerId);
+   st={x:e.clientX/zf(),y:e.clientY/zf(),l:el.offsetLeft,t:el.offsetTop,w:el.offsetWidth,h:el.offsetHeight};
+   el.style.zIndex=++z;paintPins();
+  };
+  h.onpointermove=e=>{
+   if(!st)return;
+   const dx=e.clientX/zf()-st.x,dy=e.clientY/zf()-st.y,MINW=260,MINH=180;
+   let l=st.l,t=st.t,w=st.w,hh=st.h;
+   if(d.includes('e'))w=Math.max(MINW,st.w+dx);
+   if(d.includes('s'))hh=Math.max(MINH,st.h+dy);
+   if(d.includes('w')){w=Math.max(MINW,st.w-dx);l=st.l+st.w-w} // left edge: the right side stays where it is
+   if(d.includes('n')){hh=Math.max(MINH,st.h-dy);t=st.t+st.h-hh;if(t<0){hh+=t;t=0}} // top edge: cannot go above the screen
+   el.style.left=l+'px';el.style.top=t+'px';el.style.width=w+'px';el.style.height=hh+'px';
+  };
+  h.onpointerup=h.onpointercancel=()=>{st=null};
+ });
+}
 function openWin(app,title,w,h,fn){
  const el=document.createElement('div');el.className='win';off=(off+28)%140;
  el.style.cssText=`width:${w}px;height:${h+34}px;left:${40+off}px;top:${20+off}px;z-index:${++z}`;
  el.innerHTML=`<div class="tb">${app.img?`<img src="${app.img}" width="16" height="16" style="border-radius:3px">`:ic(app.i,16)}<span class="t">${esc(title)}</span><button class="mn">–</button><button class="mx">□</button><button class="x">✕</button></div><div class="bd"></div>`;
- $('#desk').appendChild(el);if(S().maxWin)el.classList.add('max');(running[app.n]=running[app.n]||[]).push(el);paintPins();
+ $('#desk').appendChild(el);if(S().maxWin)el.classList.add('max');
+ el.dataset.pin=app.pin||app.n;el.dataset.app=app.n;dockInfo[app.n]={pin:app.pin||app.n,name:app.pin?title:app.n,i:app.i,img:app.img}; // the dock uses this to draw apps that are open but not pinned
+ addResizers(el);
+ (running[app.n]=running[app.n]||[]).push(el);paintPins();
  const focus=()=>{el.style.zIndex=++z;paintPins()};el.onpointerdown=focus;
- $('.mn',el).onclick=()=>{el.style.display='none';paintPins()};
- $('.mx',el).onclick=()=>el.classList.toggle('max');
- $('.x',el).onclick=()=>{el.remove();running[app.n]=running[app.n].filter(x=>x!==el);paintPins()};
+ $('.mn',el).onclick=()=>{sfx('min');el.style.display='none';paintPins()};
+ $('.mx',el).onclick=()=>{sfx('max');el.classList.toggle('max')};
+ $('.x',el).onclick=()=>{sfx('close');el.remove();running[app.n]=running[app.n].filter(x=>x!==el);paintPins()};
  const bar=$('.tb',el);let dx=0,dy=0,dr=false;
  bar.ondblclick=e=>{if(e.target.tagName!=='BUTTON')el.classList.toggle('max')};
  bar.oncontextmenu=e=>menu(e,[['Maximize / restore',()=>el.classList.toggle('max')],['Minimize',()=>$('.mn',el).click()],'-',['Close',()=>$('.x',el).click()]]);
  bar.onpointerdown=e=>{if(e.target.tagName==='BUTTON'||el.classList.contains('max'))return;dr=true;dx=e.clientX/zf()-el.offsetLeft;dy=e.clientY/zf()-el.offsetTop;bar.setPointerCapture(e.pointerId)};
  bar.onpointermove=e=>{if(dr){el.style.left=e.clientX/zf()-dx+'px';el.style.top=Math.max(0,e.clientY/zf()-dy)+'px'}};
  bar.onpointerup=()=>dr=false;
- beep();fn($('.bd',el),el);return el;
+ sfx('open');fn($('.bd',el),el);return el;
 }
 
 /* ================= Apps ================= */
@@ -1193,6 +1343,10 @@ const BI=svg=>'data:image/svg+xml;base64,'+btoa(svg);
 const STORE_APPS=[
  {id:'pop-dash',name:'Pop Dash',desc:'A Geometry Dash style rhythm platformer by FallGameDev.',size:'8 MB',url:STORE_RAW+'pop-dash.amo',icon:BI('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7c3aed"/><stop offset="1" stop-color="#ec4899"/></linearGradient></defs><rect x="2" y="2" width="44" height="44" rx="11" fill="url(#g)"/><rect x="10" y="22" width="14" height="14" rx="2" fill="#fde047" stroke="#1e1b4b" stroke-width="2.5"/><path d="M26 36l7-16 7 16z" fill="#fff" stroke="#1e1b4b" stroke-width="2.5" stroke-linejoin="round"/></svg>')},
  {id:'fried-rice-at-eddies',name:'Fried Rice at Eddie\'s',desc:'The Fried Rice at Eddie\'s games by FallGameDev. Loads the live menu from the frae repo, so it is always up to date.',size:'10 KB',w:960,h:600,icon:'data:image/png;base64,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',html:"<!doctype html><html><head><meta charset=\"utf-8\"><title>Fried Rice at Eddie's<\/title><style>html,body{margin:0;height:100%;background:#000}iframe{border:0;width:100%;height:100%;display:block}a{position:fixed;right:8px;bottom:8px;font:12px Segoe UI,sans-serif;color:#fff;background:#000a;padding:4px 8px;border-radius:6px;text-decoration:none;opacity:.6}a:hover{opacity:1}<\/style><\/head><body><iframe src=\"https://fallgamedev.github.io/frae/\" allow=\"autoplay; fullscreen; gamepad; clipboard-write; pointer-lock\" allowfullscreen><\/iframe><a href=\"https://fallgamedev.github.io/frae/\" target=\"_blank\">Open in a browser tab<\/a><\/body><\/html>"},
+ {id:'the-clicker-game',name:'The Clicker Game!',desc:'Tap, earn moneys, buy upgrades, prestige and climb the leaderboard. Loads the live game from the clicker repo, so it is always up to date.',size:'1 KB',w:1000,h:640,
+  icon:BI('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f59e0b"/><stop offset="1" stop-color="#ef4444"/></linearGradient></defs><rect x="2" y="2" width="44" height="44" rx="11" fill="url(#g)"/><circle cx="22" cy="22" r="11" fill="#fde047" stroke="#78350f" stroke-width="2.5"/><text x="22" y="27" font-family="Arial" font-size="14" font-weight="700" text-anchor="middle" fill="#78350f">$</text><path d="M28 28l12 6-5 2 3 5-3 1-3-5-4 3z" fill="#fff" stroke="#1e1b4b" stroke-width="2" stroke-linejoin="round"/></svg>'),
+  /* Same idea as Fried Rice at Eddie's: a tiny page that shows the live game, so the app never goes out of date */
+  html:'<!doctype html><html><head><meta charset="utf-8"><title>The Clicker Game!</title><style>html,body{margin:0;height:100%;background:#000}iframe{border:0;width:100%;height:100%;display:block}a{position:fixed;right:8px;bottom:8px;font:12px Segoe UI,sans-serif;color:#fff;background:#000a;padding:4px 8px;border-radius:6px;text-decoration:none;opacity:.6}a:hover{opacity:1}</style></head><body><iframe src="https://fallgamedev.github.io/clicker/" allow="autoplay; fullscreen; gamepad; clipboard-write; pointer-lock" allowfullscreen></iframe><a href="https://fallgamedev.github.io/clicker/" target="_blank">Open in a browser tab</a></body></html>'},
  {id:'app-builder',name:'App Builder',desc:'Make your own apps. Copy a GitHub repo, upload an HTML file, wrap a website, or code in the built-in editor.',size:'35 KB',w:960,h:600,icon:BI('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#06b6d4"/><stop offset="1" stop-color="#3b82f6"/></linearGradient></defs><rect x="2" y="2" width="44" height="44" rx="11" fill="url(#g)"/><path d="M19 17l-7 7 7 7M29 17l7 7-7 7" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M26 14l-4 20" stroke="#fde047" stroke-width="3.5" stroke-linecap="round"/></svg>'),html:"<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>App Builder<\/title>\n<style>\n/* ===== App Builder: looks like part of the OS (dark, clean, one accent color) ===== */\n:root{--bg:#1f1f1f;--sf:#2b2b2b;--sf2:#333;--bd:#ffffff1f;--tx:#fff;--dim:#ffffff9e;--acc:#4cc2ff;--bad:#ff6b6b;--good:#4ade80}\n*{box-sizing:border-box}\nhtml,body{height:100%;margin:0;background:var(--bg);color:var(--tx);font:14px/1.4 \"Segoe UI\",system-ui,sans-serif}\nbutton,input,select,textarea{font:inherit;color:var(--tx)}\nbutton{background:var(--sf2);border:1px solid var(--bd);border-radius:7px;padding:6px 12px;cursor:pointer}\nbutton:hover{background:#3d3d3d}\nbutton.pri{background:var(--acc);color:#001a26;border-color:transparent;font-weight:600}\nbutton.pri:hover{filter:brightness(1.1)}\nbutton:disabled{opacity:.45;cursor:default}\ninput,select,textarea{background:#171717;border:1px solid var(--bd);border-radius:7px;padding:6px 9px;outline:none}\ninput:focus,select:focus,textarea:focus{border-color:var(--acc)}\n#app{height:100%;display:flex;flex-direction:column}\n/* Start screen */\n.home{flex:1;overflow:auto;padding:22px}\n.home h1{margin:0 0 4px;font-weight:500}\n.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px;margin-top:18px}\n.card{background:var(--sf);border:1px solid var(--bd);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:9px}\n.card h3{margin:0;font-weight:600}\n.card p{margin:0;color:var(--dim);flex:1}\n.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}\n/* Editor screen */\n.top{display:flex;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--bd);background:#242424;flex-wrap:wrap}\n.top label{color:var(--dim);font-size:12px}\n.main{flex:1;display:flex;min-height:0}\n.files{width:190px;border-right:1px solid var(--bd);background:#242424;display:flex;flex-direction:column;flex:none}\n.files .list{flex:1;overflow:auto;padding:6px}\n.f{padding:5px 8px;border-radius:6px;cursor:pointer;display:flex;justify-content:space-between;gap:6px;white-space:nowrap}\n.f span{overflow:hidden;text-overflow:ellipsis}\n.f:hover{background:#ffffff12}.f.on{background:#ffffff22}\n.f small{color:var(--dim)}\n.f.entry:before{content:\"\u25b6\";color:var(--good);font-size:10px;margin-right:4px}\n.ed{flex:1;display:flex;flex-direction:column;min-width:0}\n.ed textarea{flex:1;border:0;border-radius:0;resize:none;font:13px/1.5 Consolas,Menlo,monospace;tab-size:2;white-space:pre;background:#161616}\n.info{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:var(--dim);padding:20px;text-align:center}\n.info img{max-width:60%;max-height:50%;background:#fff2;border-radius:8px}\n.pv{flex:1;min-width:0;border-left:1px solid var(--bd);display:flex;flex-direction:column;background:#000}\n.pv iframe{flex:1;border:0;background:#fff}\n.bar{display:flex;gap:10px;align-items:center;padding:6px 10px;border-top:1px solid var(--bd);background:#242424;color:var(--dim);font-size:12px}\n.bar .ok{color:var(--good)}.bar .bad{color:var(--bad)}\n/* Pop-up windows inside the app */\n.modal{position:fixed;inset:0;background:#000a;display:flex;align-items:center;justify-content:center;z-index:50}\n.dlg{background:var(--sf);border:1px solid var(--bd);border-radius:12px;padding:18px;width:min(520px,92vw);max-height:88vh;display:flex;flex-direction:column;gap:10px}\n.dlg .scroll{overflow:auto;max-height:46vh;border:1px solid var(--bd);border-radius:8px;padding:4px}\n.fl{display:flex;gap:8px;align-items:center;padding:3px 6px}.fl span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.fl small{color:var(--dim)}\n.sw{display:inline-block;width:26px;height:26px;border-radius:7px;cursor:pointer;border:2px solid transparent}.sw.on{border-color:#fff}\n.prog{height:8px;background:#ffffff1c;border-radius:4px;overflow:hidden}.prog i{display:block;height:100%;width:0;background:var(--acc);transition:width .15s}\n<\/style>\n<\/head>\n<body>\n<div id=\"app\"><\/div>\n<script>\n\"use strict\";\n/* ============================================================\n   App Builder: makes .amo apps for AmogOs (OS.Lite).\n   An .amo file is JSON: {amo:1, id, name, version, icon, width, height, entry, files:{path: base64}}\n   Four ways to start: GitHub repo, HTML file, website wrapper, or from scratch. Then edit, preview, install.\n   ============================================================ */\nconst $=(s,e=document)=>e.querySelector(s);\nconst esc=s=>String(s).replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));\nconst inOS=window.parent!==window; // true when running inside an AmogOs window\n\n/* ---------- The app being built ----------\n   files[path] is {text:\"...\"} for text files or {b64:\"...\",size:123} for pictures, sounds, etc. */\nlet app=null,curFile='',showPreview=false;\nconst blank=()=>({name:'My App',id:'my-app',version:'1.0',width:900,height:560,entry:'index.html',icon:'',files:{}});\n\n/* ---------- Small helpers ---------- */\nconst TEXT_EXT=/\\.(html?|css|js|mjs|json|txt|md|svg|xml|csv|glsl|frag|vert)$/i;\nconst isText=p=>TEXT_EXT.test(p);\nconst u8b64=t=>btoa(unescape(encodeURIComponent(t)));      // text -> base64 (same method the OS uses)\nconst b64u8=b=>decodeURIComponent(escape(atob(b)));         // base64 -> text\nconst slug=n=>String(n).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'')||'app';\nfunction bufB64(buf){ // ArrayBuffer -> base64, in chunks so big files do not crash\n const a=new Uint8Array(buf);let s='';for(let i=0;i<a.length;i+=0x8000)s+=String.fromCharCode.apply(null,a.subarray(i,i+0x8000));return btoa(s);\n}\nconst kb=n=>n>=1048576?(n/1048576).toFixed(1)+' MB':Math.max(1,Math.round(n/1024))+' KB';\nfunction say(msg,cls){const s=$('#msg');if(s){s.textContent=msg;s.className=cls||''}}\n\n/* Small pop-up question box (the built-in prompt() looks bad). Resolves with the text, or null. */\nfunction ask(msg,def,ok){\n return new Promise(res=>{\n  const m=document.createElement('div');m.className='modal';\n  m.innerHTML=`<div class=\"dlg\"><div>${msg}<\/div><input id=\"ai\" value=\"${esc(def||'')}\"><div class=\"row\" style=\"justify-content:flex-end\"><button class=\"pri\" id=\"ok\">${ok||'OK'}<\/button><button id=\"no\">Cancel<\/button><\/div><\/div>`;\n  document.body.appendChild(m);const i=$('#ai',m);i.focus();i.select();\n  const done=v=>{m.remove();res(v)};\n  i.onkeydown=e=>{if(e.key==='Enter')done(i.value.trim());if(e.key==='Escape')done(null)};\n  $('#ok',m).onclick=()=>done(i.value.trim());$('#no',m).onclick=()=>done(null);\n });\n}\n\n/* ---------- Icons: a colored square with a letter, or the user's own picture ---------- */\nconst PALETTE=[['#7c3aed','#ec4899'],['#06b6d4','#3b82f6'],['#f97316','#ef4444'],['#22c55e','#06b6d4'],['#eab308','#f97316'],['#6366f1','#8b5cf6'],['#14b8a6','#22c55e'],['#475569','#0f172a']];\nfunction letterIcon(name,pi){\n const [a,b]=PALETTE[pi%PALETTE.length],ch=esc((name.trim()[0]||'A').toUpperCase());\n const svg=`<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 48 48\"><defs><linearGradient id=\"g\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\"><stop offset=\"0\" stop-color=\"${a}\"/><stop offset=\"1\" stop-color=\"${b}\"/><\/linearGradient><\/defs><rect x=\"2\" y=\"2\" width=\"44\" height=\"44\" rx=\"11\" fill=\"url(#g)\"/><text x=\"24\" y=\"33\" font-family=\"Segoe UI,Arial\" font-size=\"26\" font-weight=\"700\" text-anchor=\"middle\" fill=\"#fff\">${ch}<\/text><\/svg>`;\n return 'data:image/svg+xml;base64,'+btoa(svg);\n}\nlet palIdx=0;\nfunction ensureIcon(){if(!app.icon)app.icon=letterIcon(app.name,palIdx)}\nfunction pictureIcon(file){ // any picture -> 96x96 png data URL\n return new Promise((ok,no)=>{const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{const c=document.createElement('canvas');c.width=c.height=96;const x=c.getContext('2d');const s=Math.min(im.width,im.height);x.drawImage(im,(im.width-s)/2,(im.height-s)/2,s,s,0,0,96,96);ok(c.toDataURL('image/png'))};im.onerror=no;im.src=r.result};r.onerror=no;r.readAsDataURL(file)});\n}\n\n/* ---------- Packaging: turn the editor state into a real .amo ---------- */\nfunction filesB64(){const o={};for(const [p,f] of Object.entries(app.files))o[p]=f.text!=null?u8b64(f.text):f.b64;return o}\nfunction buildAmo(){\n ensureIcon();\n return JSON.stringify({amo:1,id:app.id||slug(app.name),name:app.name,version:app.version,icon:app.icon,width:+app.width||900,height:+app.height||560,entry:app.entry,files:filesB64()});\n}\n/* Same page builder the OS uses: inlines css/js and swaps file paths for data urls. Used for the preview. */\nfunction amoBuild(pkg){\n const F=pkg.files,mime={png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',gif:'image/gif',webp:'image/webp',mp3:'audio/mpeg',ogg:'audio/ogg',wav:'audio/wav',woff2:'font/woff2',woff:'font/woff',ttf:'font/ttf',svg:'image/svg+xml',json:'application/json'};\n const asset={};for(const k in F)if(!/\\.(html?|css|js)$/i.test(k))asset[k]='data:'+(mime[k.split('.').pop().toLowerCase()]||'application/octet-stream')+';base64,'+F[k];\n const keys=Object.keys(asset).sort((a,c)=>c.length-a.length);\n const sub=t=>{for(const k of keys){t=t.split('./'+k).join(asset[k]);t=t.split(k).join(asset[k])}return t};\n const u8=k=>decodeURIComponent(escape(atob(F[k])));\n let html=u8(pkg.entry||'index.html');\n html=html.replace(/<link[^>]+href=[\"']([^\"']+)[\"'][^>]*>/gi,(m,h)=>{const k=h.replace(/^\\.\\//,'');return F[k]&&/\\.css$/i.test(k)?'<style>'+sub(u8(k))+'<\/style>':m});\n html=html.replace(/<script[^>]+src=[\"']([^\"']+)[\"'][^>]*><\\/script>/gi,(m,s)=>{const k=s.replace(/^\\.\\//,'');return F[k]?'<script>'+sub(u8(k)).replace(/<\\/script/gi,'<\\\\/script')+'<'+'/script>':m});\n return sub(html);\n}\n\n/* ---------- Starter templates ---------- */\nconst TEMPLATES={\n blank:{name:'My App',files:{'index.html':'<!DOCTYPE html>\\n<html>\\n<head>\\n  <meta charset=\"utf-8\">\\n  <title>My App<\/title>\\n  <link rel=\"stylesheet\" href=\"style.css\">\\n<\/head>\\n<body>\\n  <h1>Hello!<\/h1>\\n  <script src=\"app.js\"><\\/script>\\n<\/body>\\n<\/html>\\n','style.css':'/* Your styles go here */\\nbody{font-family:sans-serif;background:#10244d;color:#fff;text-align:center;padding-top:60px}\\n','app.js':'// Your code goes here\\nconsole.log(\"My app started!\");\\n'}},\n counter:{name:'Click Counter',files:{'index.html':'<!DOCTYPE html>\\n<html>\\n<head>\\n  <meta charset=\"utf-8\">\\n  <title>Click Counter<\/title>\\n  <link rel=\"stylesheet\" href=\"style.css\">\\n<\/head>\\n<body>\\n  <h1 id=\"n\">0<\/h1>\\n  <button id=\"b\">Click me!<\/button>\\n  <script src=\"app.js\"><\\/script>\\n<\/body>\\n<\/html>\\n','style.css':'body{font-family:sans-serif;background:#1b1340;color:#fff;text-align:center;padding-top:70px}\\n#n{font-size:96px;margin:0}\\nbutton{font-size:22px;padding:12px 28px;border:0;border-radius:12px;background:#ec4899;color:#fff;cursor:pointer}\\n','app.js':'// Add one every time the button is clicked\\nlet count=0;\\nconst out=document.getElementById(\"n\");\\ndocument.getElementById(\"b\").onclick=()=>{count++;out.textContent=count};\\n'}},\n game:{name:'Dodge Game',files:{'index.html':'<!DOCTYPE html>\\n<html>\\n<head>\\n  <meta charset=\"utf-8\">\\n  <title>Dodge Game<\/title>\\n  <style>html,body{margin:0;height:100%;background:#0b1020}canvas{display:block;margin:auto}<\/style>\\n<\/head>\\n<body>\\n  <canvas id=\"c\" width=\"480\" height=\"480\"><\/canvas>\\n  <script src=\"game.js\"><\\/script>\\n<\/body>\\n<\/html>\\n','game.js':'// Dodge the falling blocks. Move with the arrow keys or A and D.\\nconst c=document.getElementById(\"c\"),x=c.getContext(\"2d\");\\nlet me,blocks,score,dead,keys={};\\nfunction start(){me={x:220,y:430,w:40,h:40};blocks=[];score=0;dead=false}\\naddEventListener(\"keydown\",e=>keys[e.key.toLowerCase()]=true);\\naddEventListener(\"keyup\",e=>keys[e.key.toLowerCase()]=false);\\nc.onclick=()=>{if(dead)start()};\\nfunction loop(){\\n  // move the player\\n  if(keys.arrowleft||keys.a)me.x-=6;\\n  if(keys.arrowright||keys.d)me.x+=6;\\n  me.x=Math.max(0,Math.min(440,me.x));\\n  if(!dead){\\n    if(Math.random()<0.04)blocks.push({x:Math.random()*440,y:-40,s:2+Math.random()*3});\\n    blocks.forEach(b=>b.y+=b.s);\\n    blocks=blocks.filter(b=>b.y<500);\\n    score++;\\n    // hit check\\n    blocks.forEach(b=>{if(b.x<me.x+me.w&&b.x+40>me.x&&b.y<me.y+me.h&&b.y+40>me.y)dead=true});\\n  }\\n  // draw everything\\n  x.fillStyle=\"#0b1020\";x.fillRect(0,0,480,480);\\n  x.fillStyle=\"#4cc2ff\";x.fillRect(me.x,me.y,me.w,me.h);\\n  x.fillStyle=\"#ec4899\";blocks.forEach(b=>x.fillRect(b.x,b.y,40,40));\\n  x.fillStyle=\"#fff\";x.font=\"20px sans-serif\";x.fillText(\"Score: \"+score,10,28);\\n  if(dead)x.fillText(\"Crashed! Click to play again\",100,240);\\n  requestAnimationFrame(loop);\\n}\\nstart();loop();\\n'}}\n};\nfunction fromTemplate(k){\n const t=TEMPLATES[k];app=blank();app.name=t.name;app.id=slug(t.name);\n for(const p in t.files)app.files[p]={text:t.files[p]};\n app.entry='index.html';app.icon='';return app;\n}\n/* \"Website app\": a full-size frame that shows a live web page (good for games hosted on GitHub Pages) */\nfunction fromWebsite(url){\n let host=url;try{host=new URL(url).hostname.replace(/^www\\./,'')}catch(e){}\n app=blank();app.name=host;app.id=slug(host);app.width=960;app.height=600;app.icon='';\n app.files['index.html']={text:'<!DOCTYPE html>\\n<html>\\n<head>\\n  <meta charset=\"utf-8\">\\n  <title>'+esc(host)+'<\/title>\\n  <style>html,body{margin:0;height:100%;background:#000}iframe{border:0;width:100%;height:100%;display:block}<\/style>\\n<\/head>\\n<body>\\n  <!-- This app shows a live website. Sites that refuse to be framed will not work. -->\\n  <iframe src=\"'+esc(url)+'\" allow=\"autoplay; fullscreen; gamepad; clipboard-write; pointer-lock\" allowfullscreen><\/iframe>\\n<\/body>\\n<\/html>\\n'};\n return app;\n}\n\n/* ---------- Loading: HTML file, .amo file, GitHub repo ---------- */\nasync function loadHtmlFile(f){\n const t=await f.text(),m=t.match(/<title[^>]*>([^<]*)<\\/title>/i);\n app=blank();app.name=(m&&m[1].trim())||f.name.replace(/\\.html?$/i,'');app.id=slug(app.name);app.files['index.html']={text:t};\n}\nasync function loadAmoFile(f){\n const o=JSON.parse(await f.text());if(o.amo!==1||!o.files)throw new Error('That is not an .amo app file.');\n app=blank();Object.assign(app,{name:o.name||'App',id:o.id||slug(o.name||'app'),version:o.version||'1.0',width:o.width||900,height:o.height||560,entry:o.entry||'index.html',icon:o.icon||''});\n for(const [p,b] of Object.entries(o.files)){\n  if(isText(p)){try{app.files[p]={text:b64u8(b)};continue}catch(e){}}\n  app.files[p]={b64:b,size:Math.round(b.length*0.75)};\n }\n}\n// Turn \"owner/repo\" or a github.com link into parts\nfunction parseRepo(v){\n v=String(v).trim().replace(/\\.git$/i,'').replace(/\\/$/,'');\n let m=v.match(/github\\.com\\/([^\\/\\s]+)\\/([^\\/\\s#?]+)(?:\\/tree\\/([^\\/\\s]+)(?:\\/(.+))?)?/i);\n if(m)return{o:m[1],r:m[2],b:m[3]||'',sub:m[4]||''};\n m=v.match(/^([\\w.-]+)\\/([\\w.-]+)$/);\n return m?{o:m[1],r:m[2],b:'',sub:''}:null;\n}\nasync function githubList(p){ // finds the branch, then lists every file in the repo\n if(!p.b){const r=await fetch(`https://api.github.com/repos/${p.o}/${p.r}`);if(!r.ok)throw new Error(r.status===404?'That repo was not found. Is it public?':'GitHub is busy. Try again in a minute.');p.b=(await r.json()).default_branch}\n const r=await fetch(`https://api.github.com/repos/${p.o}/${p.r}/git/trees/${encodeURIComponent(p.b)}?recursive=1`);\n if(!r.ok)throw new Error('Could not read that repo. Try again in a minute.');\n const j=await r.json(),pre=p.sub?p.sub.replace(/\\/$/,'')+'/':'';\n return j.tree.filter(x=>x.type==='blob'&&x.path.startsWith(pre)).map(x=>({path:x.path,name:x.path.slice(pre.length),size:x.size||0}));\n}\n// Files we pick for you: skip hidden files, node_modules, and anything over 4 MB\nconst skipByDefault=f=>/(^|\\/)(\\.|node_modules\\/)/.test(f.name)||f.size>4*1048576;\nfunction chooseFiles(list,p){ // pop-up with checkboxes, resolves with the chosen files or null\n return new Promise(res=>{\n  const m=document.createElement('div');m.className='modal';\n  const rows=list.map((f,i)=>`<label class=\"fl\"><input type=\"checkbox\" data-i=\"${i}\" ${skipByDefault(f)?'':'checked'}><span title=\"${esc(f.name)}\">${esc(f.name)}<\/span><small>${kb(f.size)}<\/small><\/label>`).join('');\n  m.innerHTML=`<div class=\"dlg\"><b>${esc(p.o)}/${esc(p.r)}<\/b> <span style=\"color:var(--dim)\">(branch ${esc(p.b)})<\/span><div style=\"color:var(--dim)\">Pick the files to copy. Big files are left unchecked.<\/div><div class=\"scroll\">${rows}<\/div><div id=\"tot\" style=\"color:var(--dim)\"><\/div><div class=\"row\" style=\"justify-content:flex-end\"><button class=\"pri\" id=\"ok\">Copy these files<\/button><button id=\"no\">Cancel<\/button><\/div><\/div>`;\n  document.body.appendChild(m);\n  const tot=()=>{const c=[...m.querySelectorAll('input:checked')];const n=c.reduce((a,x)=>a+list[+x.dataset.i].size,0);$('#tot',m).textContent=c.length+' files, '+kb(n)+(n>25*1048576?'  (that is a lot for one app)':'')};\n  m.onchange=tot;tot();\n  $('#ok',m).onclick=()=>{const c=[...m.querySelectorAll('input:checked')].map(x=>list[+x.dataset.i]);m.remove();res(c)};\n  $('#no',m).onclick=()=>{m.remove();res(null)};\n });\n}\nasync function githubLoad(input,bar){\n const p=parseRepo(input);if(!p)throw new Error('Type a repo like FallGameDev/gd-clone or paste its github.com link.');\n say('Looking at the repo\u2026');\n const list=await githubList(p);if(!list.length)throw new Error('No files found there.');\n const pick=await chooseFiles(list,p);if(!pick||!pick.length){say('');return false}\n app=blank();app.name=p.r.replace(/[-_]+/g,' ');app.id=slug(p.r);\n let done=0;const total=pick.length;\n const getOne=async f=>{ // download one file from raw.githubusercontent.com\n  // raw.githubusercontent.com/owner/repo/branch/path (every path piece is url-encoded)\n  const full=(p.sub?p.sub.replace(/\\/$/,'')+'/':'')+f.name;\n  const url='https://raw.githubusercontent.com/'+[p.o,p.r,p.b].map(encodeURIComponent).join('/')+'/'+full.split('/').map(encodeURIComponent).join('/');\n  const r=await fetch(url);if(!r.ok)throw new Error('Could not download '+f.name);\n  if(isText(f.name))app.files[f.name]={text:await r.text()};\n  else{const buf=await r.arrayBuffer();app.files[f.name]={b64:bufB64(buf),size:buf.byteLength}}\n  done++;bar(done/total);say('Copied '+done+' of '+total+' files\u2026');\n };\n const queue=[...pick];await Promise.all(Array.from({length:6},async()=>{while(queue.length)await getOne(queue.shift())}));\n // entry: index.html at the top, otherwise the first html file\n app.entry=app.files['index.html']?'index.html':(Object.keys(app.files).find(k=>/\\.html?$/i.test(k))||'index.html');\n // icon: look for a picture called icon, logo or favicon\n const ic=Object.keys(app.files).find(k=>/(^|\\/)(icon|logo|favicon)[^\\/]*\\.(png|jpg|jpeg|webp)$/i.test(k));\n if(ic){try{const mt=/png$/i.test(ic)?'png':'jpeg';const bl=await (await fetch('data:image/'+mt+';base64,'+app.files[ic].b64)).blob();app.icon=await pictureIcon(bl)}catch(e){}}\n return true;\n}\n\n/* ---------- Screen 1: Start ---------- */\nfunction showStart(msg){\n $('#app').innerHTML=`<div class=\"home\"><h1>App Builder<\/h1><div style=\"color:var(--dim)\">Make an app for AmogOs. Pick a way to start.<\/div>\n <div class=\"cards\">\n  <div class=\"card\"><h3>Copy from GitHub<\/h3><p>Type a repo and the builder copies its files into an app.<\/p><input id=\"gh\" placeholder=\"FallGameDev/gd-clone\"><div class=\"prog\" id=\"gp\" hidden><i><\/i><\/div><button class=\"pri\" id=\"ghb\">Copy repo<\/button><\/div>\n  <div class=\"card\"><h3>Upload an HTML file<\/h3><p>Turn any .html page or game into an app.<\/p><input id=\"hf\" type=\"file\" accept=\".html,.htm\" hidden><button class=\"pri\" id=\"hfb\">Choose HTML file<\/button><\/div>\n  <div class=\"card\"><h3>Wrap a website<\/h3><p>Make an app that shows a live website, like a game on GitHub Pages.<\/p><input id=\"wu\" placeholder=\"https://fallgamedev.github.io/frae/\"><button class=\"pri\" id=\"wub\">Make app<\/button><\/div>\n  <div class=\"card\"><h3>Build from scratch<\/h3><p>Use the code editor. Start blank or from an example.<\/p><select id=\"tp\"><option value=\"blank\">Blank page<\/option><option value=\"counter\">Click counter<\/option><option value=\"game\">Dodge game<\/option><\/select><button class=\"pri\" id=\"tpb\">Start building<\/button><\/div>\n  <div class=\"card\"><h3>Open an .amo file<\/h3><p>Edit an app you already have.<\/p><input id=\"af\" type=\"file\" accept=\".amo,application/json\" hidden><button id=\"afb\">Choose .amo file<\/button><\/div>\n <\/div><div id=\"msg\" style=\"margin-top:16px;color:var(--dim)\">${esc(msg||'')}<\/div><\/div>`;\n const go=()=>{curFile=app.entry&&app.files[app.entry]?app.entry:Object.keys(app.files)[0]||'';showPreview=false;showEditor()};\n const fail=e=>say(e.message||'Something went wrong.','bad');\n $('#ghb').onclick=async()=>{const b=$('#ghb'),bar=$('#gp');b.disabled=true;bar.hidden=false;\n  try{if(await githubLoad($('#gh').value,v=>bar.firstChild.style.width=(v*100)+'%'))go()}catch(e){fail(e)}b.disabled=false;bar.hidden=true};\n $('#gh').onkeydown=e=>{if(e.key==='Enter')$('#ghb').click()};\n $('#hfb').onclick=()=>$('#hf').click();$('#hf').onchange=async e=>{const f=e.target.files[0];if(f){await loadHtmlFile(f);go()}};\n $('#wub').onclick=()=>{let u=$('#wu').value.trim();if(!u)return say('Type a website address first.','bad');if(!/^https?:\\/\\//i.test(u))u='https://'+u;fromWebsite(u);go()};\n $('#tpb').onclick=()=>{fromTemplate($('#tp').value);go()};\n $('#afb').onclick=()=>$('#af').click();$('#af').onchange=async e=>{const f=e.target.files[0];if(f){try{await loadAmoFile(f);go()}catch(x){fail(x)}}};\n}\n\n/* ---------- Screen 2: Editor ---------- */\nfunction showEditor(){\n ensureIcon();\n $('#app').innerHTML=`<div class=\"top\">\n  <button id=\"back\" title=\"Back to the start screen\">\u2039 Start<\/button>\n  <img id=\"ic\" src=\"${app.icon}\" width=\"30\" height=\"30\" style=\"border-radius:8px;cursor:pointer\" title=\"Change the icon\">\n  <input id=\"nm\" value=\"${esc(app.name)}\" style=\"width:150px\" title=\"App name\">\n  <label>Window<\/label><input id=\"aw\" type=\"number\" value=\"${app.width}\" style=\"width:64px\"><label>x<\/label><input id=\"ah\" type=\"number\" value=\"${app.height}\" style=\"width:64px\">\n  <label>Version<\/label><input id=\"av\" value=\"${esc(app.version)}\" style=\"width:54px\">\n  <label>Starts with<\/label><select id=\"en\"><\/select>\n  <span style=\"flex:1\"><\/span>\n  <button id=\"pv\">${showPreview?'Hide preview':'Run preview'}<\/button>\n  <button id=\"dl\">Download .amo<\/button>\n  <button class=\"pri\" id=\"in\" ${inOS?'':'disabled title=\"Install works inside AmogOs\"'}>Install<\/button>\n <\/div>\n <div class=\"main\"><div class=\"files\"><div class=\"row\" style=\"padding:6px\"><button id=\"nf\" style=\"flex:1\">+ New<\/button><button id=\"up\" title=\"Add pictures, sounds or other files\">Upload<\/button><input id=\"upf\" type=\"file\" multiple hidden><\/div><div class=\"list\" id=\"fl\"><\/div><\/div>\n  <div class=\"ed\" id=\"ed\"><\/div>${showPreview?'<div class=\"pv\"><iframe id=\"pf\" sandbox=\"allow-scripts allow-forms allow-popups allow-modals allow-pointer-lock\"><\/iframe><\/div>':''}<\/div>\n <div class=\"bar\"><span id=\"msg\"><\/span><span style=\"flex:1\"><\/span><span id=\"sz\"><\/span><\/div>`;\n drawFiles();drawEditor();drawEntry();size();\n if(showPreview)runPreview();\n // top bar fields write straight into the app\n $('#back').onclick=()=>showStart();\n $('#nm').oninput=e=>{app.name=e.target.value||'App';app.id=slug(app.name);if(app.icon.startsWith('data:image/svg+xml')){app.icon=letterIcon(app.name,palIdx);$('#ic').src=app.icon}};\n $('#aw').oninput=e=>app.width=+e.target.value;$('#ah').oninput=e=>app.height=+e.target.value;$('#av').oninput=e=>app.version=e.target.value;\n $('#en').onchange=e=>{app.entry=e.target.value;drawFiles()};\n $('#ic').onclick=iconDialog;\n $('#pv').onclick=()=>{showPreview=!showPreview;showEditor()};\n $('#nf').onclick=async()=>{const n=await ask('Name for the new file (like page2.html or extra.js)','new-file.js','Create');if(!n)return;if(app.files[n])return say('That file already exists.','bad');app.files[n]={text:''};curFile=n;drawFiles();drawEditor();drawEntry()};\n $('#up').onclick=()=>$('#upf').click();$('#upf').onchange=e=>addFiles([...e.target.files]);\n $('#fl').ondragover=e=>e.preventDefault();$('#fl').ondrop=e=>{e.preventDefault();addFiles([...e.dataTransfer.files])};\n $('#dl').onclick=()=>{const blob=new Blob([buildAmo()],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=(app.id||'app')+'.amo';document.body.appendChild(a);a.click();a.remove();say('Saved '+a.download,'ok')};\n $('#in').onclick=()=>{say('Waiting for AmogOs\u2026');parent.postMessage({amoInstall:buildAmo(),name:app.name},'*')};\n}\n// AmogOs answers the Install button with {amoInstalled:true|false}\naddEventListener('message',e=>{if(e.data&&typeof e.data==='object'&&'amoInstalled' in e.data)say(e.data.amoInstalled?'Installed! Find it on your desktop.':'Not installed.',e.data.amoInstalled?'ok':'bad')});\n\nasync function addFiles(list){\n for(const f of list){\n  if(isText(f.name))app.files[f.name]={text:await f.text()};\n  else{const buf=await f.arrayBuffer();app.files[f.name]={b64:bufB64(buf),size:buf.byteLength}}\n }\n if(list.length)curFile=list[list.length-1].name;\n drawFiles();drawEditor();drawEntry();size();\n}\nfunction drawEntry(){ // the \"Starts with\" list only offers html files\n const h=Object.keys(app.files).filter(k=>/\\.html?$/i.test(k));if(!h.includes(app.entry)&&h.length)app.entry=h[0];\n $('#en').innerHTML=h.map(k=>`<option ${k===app.entry?'selected':''}>${esc(k)}<\/option>`).join('')||'<option>(add an html file)<\/option>';\n}\nfunction drawFiles(){\n const names=Object.keys(app.files).sort();\n $('#fl').innerHTML=names.map(n=>{const f=app.files[n],sz=f.text!=null?f.text.length:f.size;return`<div class=\"f ${n===curFile?'on':''} ${n===app.entry?'entry':''}\" data-n=\"${esc(n)}\"><span>${esc(n)}<\/span><small>${kb(sz)}<\/small><\/div>`}).join('')||'<div style=\"color:var(--dim);padding:8px\">No files yet<\/div>';\n $('#fl').onclick=e=>{const d=e.target.closest('.f');if(d){curFile=d.dataset.n;drawFiles();drawEditor()}};\n $('#fl').oncontextmenu=e=>{const d=e.target.closest('.f');if(!d)return;e.preventDefault();fileMenu(d.dataset.n)};\n}\n// Rename / delete (shown as a small pop-up because right-click menus belong to the OS)\nfunction fileMenu(n){\n const m=document.createElement('div');m.className='modal';\n m.innerHTML=`<div class=\"dlg\"><b>${esc(n)}<\/b><div class=\"row\"><button id=\"r\">Rename<\/button><button id=\"d\">Delete<\/button><button id=\"e\">Make this the start file<\/button><button id=\"c\">Close<\/button><\/div><\/div>`;\n document.body.appendChild(m);\n $('#c',m).onclick=()=>m.remove();\n $('#e',m).onclick=()=>{if(/\\.html?$/i.test(n)){app.entry=n;drawEntry();drawFiles()}else say('Only html files can be the start file.','bad');m.remove()};\n $('#d',m).onclick=()=>{m.remove();delete app.files[n];if(curFile===n)curFile=Object.keys(app.files)[0]||'';drawFiles();drawEditor();drawEntry();size()};\n $('#r',m).onclick=async()=>{m.remove();const v=await ask('New name',n,'Rename');if(!v||v===n)return;if(app.files[v])return say('That name is used.','bad');app.files[v]=app.files[n];delete app.files[n];if(app.entry===n)app.entry=v;if(curFile===n)curFile=v;drawFiles();drawEditor();drawEntry()};\n}\nfunction drawEditor(){\n const ed=$('#ed'),f=app.files[curFile];\n if(!f){ed.innerHTML='<div class=\"info\">Pick a file on the left, or make a new one.<\/div>';return}\n if(f.text==null){ // pictures and sounds cannot be typed, but they can be previewed or removed\n  const img=/\\.(png|jpe?g|gif|webp)$/i.test(curFile);\n  ed.innerHTML=`<div class=\"info\">${img?`<img src=\"data:image/${curFile.split('.').pop().toLowerCase().replace('jpg','jpeg')};base64,${f.b64}\">`:''}<div>${esc(curFile)} is not a text file (${kb(f.size)}).<br>Right-click it in the list to rename or delete it.<\/div><\/div>`;return;\n }\n ed.innerHTML='<textarea id=\"code\" spellcheck=\"false\" wrap=\"off\"><\/textarea>';\n const t=$('#code');t.value=f.text;\n t.oninput=()=>{f.text=t.value;clearTimeout(sizeT);sizeT=setTimeout(size,400)};\n t.onkeydown=e=>{ // Tab key types two spaces instead of leaving the box\n  if(e.key==='Tab'){e.preventDefault();const s=t.selectionStart;t.setRangeText('  ',s,t.selectionEnd,'end');f.text=t.value}\n  if(e.key==='Enter'&&e.ctrlKey){e.preventDefault();showPreview=true;showEditor()}\n };\n}\nfunction runPreview(){\n try{const pkg=JSON.parse(buildAmo());$('#pf').srcdoc=amoBuild(pkg)}\n catch(e){$('#pf').srcdoc='<body style=\"font-family:sans-serif;padding:20px\">Could not build a preview. Add an html file first.<\/body>'}\n}\nlet sizeT; // timer so the size meter does not rebuild the whole app on every key press\nfunction size(){const n=buildAmo().length;$('#sz').textContent='App size: '+kb(n)+(n>30*1048576?'  (very big, it may be slow to install)':'')}\nfunction iconDialog(){\n const m=document.createElement('div');m.className='modal';\n m.innerHTML=`<div class=\"dlg\"><b>App icon<\/b><div>Pick a color for the letter icon:<\/div><div>${PALETTE.map((p,i)=>`<span class=\"sw ${i===palIdx?'on':''}\" data-p=\"${i}\" style=\"background:linear-gradient(135deg,${p[0]},${p[1]})\"><\/span>`).join(' ')}<\/div><div class=\"row\"><button id=\"pic\">Use my own picture<\/button><input id=\"pf2\" type=\"file\" accept=\"image/*\" hidden><button id=\"ok\" class=\"pri\" style=\"margin-left:auto\">Done<\/button><\/div><\/div>`;\n document.body.appendChild(m);\n m.onclick=e=>{const p=e.target.dataset.p;if(p!=null){palIdx=+p;app.icon=letterIcon(app.name,palIdx);$('#ic').src=app.icon;m.querySelectorAll('.sw').forEach(s=>s.classList.toggle('on',+s.dataset.p===palIdx))}};\n $('#pic',m).onclick=()=>$('#pf2',m).click();\n $('#pf2',m).onchange=async e=>{const f=e.target.files[0];if(f){try{app.icon=await pictureIcon(f);$('#ic').src=app.icon}catch(x){say('Could not read that picture.','bad')}}};\n $('#ok',m).onclick=()=>m.remove();\n}\n\nshowStart();\n<\/script>\n<\/body>\n<\/html>\n"}
 ];
 let storeCat=[];
@@ -1218,12 +1372,200 @@ function storeApp(b){
  };
  views.push({b,draw});draw();loadCatalogs().then(()=>{if(b.isConnected)draw()});
 }
+/* ================= Music player =================
+   Plays audio files from this PC (a Music folder is made for you) plus three songs the OS makes by itself.
+   A song file is saved like any other file: path -> {t:'f', m:'audio/...', d: data URL}.
+   Sound path:  <audio> or built-in song -> bus (volume) -> analyser (for the bars) -> speakers. */
+const MUSIC_DIR='/Music';
+const mf=n=>440*Math.pow(2,(n-69)/12); // MIDI note number -> frequency in Hz (A4 = note 69 = 440 Hz)
+/* Built-in songs: short patterns that loop forever, played with oscillators (no audio files).
+   chords: three MIDI notes per bar (one bar = 16 steps). arp: which chord note to play on each step (3 means the root two octaves up).
+   kick and hat: 16 characters, "x" is a hit. bass and lead are oscillator wave types. */
+const SYNTH_TRACKS=[
+ {id:'syn-orbit',name:'Chill Orbit',bpm:84,lead:'triangle',bass:'sine',chords:[[57,60,64],[53,57,60],[48,52,55],[55,59,62]],arp:[0,1,2,1,3,2,1,2],kick:'x.......x.......',hat:'..x...x...x...x.'},
+ {id:'syn-pixel',name:'Pixel Parade',bpm:128,lead:'square',bass:'sawtooth',chords:[[60,64,67],[67,71,74],[57,60,64],[65,69,72]],arp:[0,2,1,2,3,2,1,2],kick:'x...x...x...x...',hat:'..x...x...x...x.'},
+ {id:'syn-night',name:'Night Drive',bpm:100,lead:'sawtooth',bass:'triangle',chords:[[52,55,59],[48,52,55],[45,48,52],[50,54,57]],arp:[0,1,2,3,2,1,2,1],kick:'x.....x...x.....',hat:'x.x.x.x.x.x.x.x.'}
+];
+/* Starts a built-in song into the "dest" node. Returns a function that stops it.
+   A tiny scheduler looks 0.25 seconds ahead every 60 ms and books the notes with exact audio times. */
+function synthStart(trk,dest){
+ const ac=audioCtx(),out=ac.createGain(),sp=60/trk.bpm/4; // sp = length of one 16th note in seconds
+ out.connect(dest);
+ let step=0,next=ac.currentTime+.08;
+ const run=()=>{
+  while(next<ac.currentTime+.25){
+   const s=step%16,ch=trk.chords[Math.floor(step/16)%trk.chords.length];
+   if(s%4===0)tone(mf(ch[0]-12),next,sp*3.6,trk.bass,.3,null,out);                       // bass on every beat
+   const a=trk.arp[s%trk.arp.length];
+   tone(mf(a===3?ch[0]+24:ch[a]+12),next,sp*1.8,trk.lead,.14,null,out);                   // arpeggio
+   if(trk.kick[s]==='x')tone(150,next,.14,'sine',.7,40,out);                              // kick drum
+   if(trk.hat[s]==='x')noise(next,.05,.25,8000,9000,out);                                 // hi-hat
+   step++;next+=sp;
+  }
+ };
+ run();const timer=setInterval(run,60);
+ return()=>{clearInterval(timer);out.gain.setTargetAtTime(0,ac.currentTime,.03);setTimeout(()=>out.disconnect(),300)}; // fade out, then cut
+}
+function musicApp(b,arg){
+ const fs=()=>U().fs;
+ if(!fs()[MUSIC_DIR]){fs()[MUSIC_DIR]={t:'d'};persist()} // older accounts get the Music folder the first time they open the app
+ const win=b.closest('.win');if(win)$('.t',win).textContent='Music'; // the title stays "Music" even when a song file opened it
+ const audio=new Audio();
+ let curId=null,playing=false,shuffle=false,repeat=0,seeking=false; // repeat: 0 off, 1 all, 2 one song
+ let volume=(S().musicVol??70)/100,blobUrl='',stopSynth=null,synthAcc=0,synthT0=0,bus=null,an=null,node=null,raf=0;
+ const svg=(d,x)=>`<svg viewBox="0 0 24 24" width="18" height="18" ${x||'fill="currentColor"'}>${d}</svg>`;
+ const ST='fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
+ const ICO={ // control icons (drawn with currentColor so they match the theme)
+  play:svg('<path d="M8 5v14l11-7z"/>'),pause:svg('<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>'),
+  prev:svg('<path d="M6 5h2v14H6zM20 5v14L9 12z"/>'),next:svg('<path d="M16 5h2v14h-2zM4 5l11 7-11 7z"/>'),
+  shuf:svg('<path d="M3 7h4l10 10h4M3 17h4l3-3M14 10l3-3h4M18 4l3 3-3 3M18 14l3 3-3 3"/>',ST),
+  rep:svg('<path d="M4 11V9a3 3 0 0 1 3-3h13M17 3l3 3-3 3M20 13v2a3 3 0 0 1-3 3H4M7 21l-3-3 3-3"/>',ST),
+  vol:svg('<path d="M4 9v6h4l5 4V5L8 9zM16 8a5 5 0 0 1 0 8"/>',ST),
+  note:svg('<g fill="#ec4899"><circle cx="8" cy="18" r="3.5"/><path d="M11 18V4l9 2.5V10l-7-1.8V18z"/></g>','')
+ };
+ b.innerHTML=`<div class="mu"><div class="lib"><div class="hd"><button class="pri" data-a="add">Add songs</button></div><div class="lst"></div><input type="file" accept="audio/*,.mp3,.ogg,.wav,.m4a,.flac,.opus,.aac" multiple hidden></div>
+ <div class="np"><div class="disc"><span class="ring"></span><svg viewBox="0 0 24 24" width="64" height="64"><g fill="#fff"><circle cx="8" cy="18" r="3.5"/><path d="M11 18V4l9 2.5V10l-7-1.8V18z"/></g></svg></div>
+ <div class="mt"></div><div class="ms"></div><canvas width="380" height="64"></canvas>
+ <div class="sk"><span class="tc">0:00</span><input type="range" class="seek" min="0" max="1000" value="0"><span class="td">0:00</span></div>
+ <div class="ctl"><button data-a="shuf" title="Shuffle">${ICO.shuf}</button><button data-a="prev" title="Previous">${ICO.prev}</button><button class="pri" data-a="play" title="Play or pause"></button><button data-a="next" title="Next">${ICO.next}</button><button data-a="rep" title="Repeat"></button></div>
+ <div class="vl">${ICO.vol}<input type="range" class="vol" min="0" max="100" value="${Math.round(volume*100)}"></div></div></div>`;
+
+ /* ----- the library: built-in songs first, then every audio file on this PC ----- */
+ const lib=()=>{
+  const files=Object.keys(fs()).filter(p=>isFile(p)&&(fs()[p].m||'').startsWith('audio')).sort((x,y)=>base(x).localeCompare(base(y)));
+  return[...SYNTH_TRACKS.map(s=>({kind:'syn',id:s.id,name:s.name,sub:'Built-in song',syn:s})),
+   ...files.map(p=>({kind:'file',id:p,path:p,name:base(p).replace(/\.[^.]+$/,''),sub:parent(p)}))];
+ };
+ const cur=()=>lib().find(x=>x.id===curId);
+ const fmt=s=>{s=Math.max(0,Math.floor(s||0));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')};
+
+ /* ----- audio plumbing: one volume bus and one analyser shared by files and built-in songs ----- */
+ function ensureBus(){
+  const ac=audioCtx();if(!ac)return false;
+  if(!bus){bus=ac.createGain();an=ac.createAnalyser();an.fftSize=128;bus.connect(an);an.connect(ac.destination);node=ac.createMediaElementSource(audio);node.connect(bus)}
+  bus.gain.value=volume;return true;
+ }
+ function stopAll(){ // silence everything (does not forget which song is selected)
+  audio.pause();if(blobUrl){URL.revokeObjectURL(blobUrl);blobUrl=''}audio.removeAttribute('src');
+  if(stopSynth){stopSynth();stopSynth=null}
+ }
+ async function play(id){
+  const t=lib().find(x=>x.id===id);if(!t)return;
+  stopAll();curId=id;
+  if(!ensureBus())return toast('This browser can’t play sound.');
+  if(t.kind==='syn'){stopSynth=synthStart(t.syn,bus);synthAcc=0;synthT0=audioCtx().currentTime}
+  else{
+   try{ // data URL -> blob URL, so big songs can be seeked quickly
+    const bl=await(await fetch(fs()[t.path].d)).blob();if(curId!==id)return; // the person picked another song while this one loaded
+    blobUrl=URL.createObjectURL(bl);audio.src=blobUrl;await audio.play();
+   }catch(e){playing=false;paint();return toast('That song couldn’t be played.')}
+  }
+  playing=true;paint();
+ }
+ function toggle(){ // play or pause
+  const t=cur();if(!t){const l=lib();if(l.length)play(l[0].id);return}
+  if(t.kind==='syn'){
+   if(playing){synthAcc+=audioCtx().currentTime-synthT0;stopSynth&&stopSynth();stopSynth=null;playing=false}
+   else{stopSynth=synthStart(t.syn,bus);synthT0=audioCtx().currentTime;playing=true}
+  }else if(playing){audio.pause();playing=false}
+  else{audio.play().catch(()=>{});playing=true}
+  paint();
+ }
+ function skip(d){ // next (1) or previous (-1) song, or a random one when shuffle is on
+  const l=lib();if(!l.length)return;let i=l.findIndex(x=>x.id===curId);
+  if(shuffle&&l.length>1){let j;do j=Math.floor(Math.random()*l.length);while(j===i);i=j}else i=(i+d+l.length)%l.length;
+  play(l[i].id);
+ }
+ audio.onended=()=>{ // a song file finished
+  if(repeat===2){audio.currentTime=0;audio.play();return}
+  const l=lib(),i=l.findIndex(x=>x.id===curId);
+  if(repeat===0&&!shuffle&&i===l.length-1){playing=false;paint()}else skip(1);
+ };
+
+ /* ----- drawing ----- */
+ function drawList(){
+  const l=lib(),row=x=>`<div class="sg ${x.id===curId?'on':''}" data-id="${esc(x.id)}"><span class="nt">${ICO.note}</span><span style="flex:1;min-width:0"><span class="ell">${esc(x.name)}</span><small class="ell">${esc(x.sub)}</small></span></div>`;
+  const mine=l.filter(x=>x.kind==='file');
+  $('.lst',b).innerHTML=`<div class="sh">Built-in songs</div>${l.filter(x=>x.kind==='syn').map(row).join('')}<div class="sh">Your music</div>${mine.map(row).join('')||'<div class="em">No songs yet. Press Add songs, or drop audio files onto this window.</div>'}`;
+ }
+ function paint(){ // updates the whole screen from the current state
+  const t=cur();
+  $('.mt',b).textContent=t?t.name:'Nothing playing';$('.ms',b).textContent=t?t.sub:'Pick a song from the list';
+  $('[data-a=play]',b).innerHTML=playing?ICO.pause:ICO.play;$('.disc',b).classList.toggle('spin',playing);
+  $('[data-a=shuf]',b).classList.toggle('pri',shuffle);
+  const rp=$('[data-a=rep]',b);rp.classList.toggle('pri',repeat>0);rp.innerHTML=ICO.rep+(repeat===2?'<b style="font-size:10px">1</b>':'');
+  $('.seek',b).disabled=!t||t.kind==='syn';
+  drawList();
+ }
+ function sync(){ // the Files changed (a song was added or deleted): keep the list right, stop if the playing song is gone
+  if(curId&&!cur()){stopAll();curId=null;playing=false}
+  paint();
+ }
+ const cv=$('canvas',b),g=cv.getContext('2d'),data=new Uint8Array(64);
+ function viz(){ // 32 bars that jump with the music
+  g.clearRect(0,0,cv.width,cv.height);
+  if(an&&playing)an.getByteFrequencyData(data);else data.fill(0);
+  g.fillStyle=document.documentElement.style.getPropertyValue('--acc')||'#4cc2ff';
+  const bw=cv.width/32;for(let i=0;i<32;i++){const h=Math.max(3,data[i]/255*cv.height);g.fillRect(i*bw+2,cv.height-h,bw-4,h)}
+ }
+ function clock(){ // the time numbers and the seek bar
+  const t=cur();if(!t)return;
+  if(t.kind==='syn'){$('.tc',b).textContent=fmt(synthAcc+(playing?audioCtx().currentTime-synthT0:0));$('.td',b).textContent='Live';return}
+  const d=audio.duration;$('.tc',b).textContent=fmt(audio.currentTime);$('.td',b).textContent=isFinite(d)?fmt(d):'0:00';
+  if(!seeking&&isFinite(d)&&d>0)$('.seek',b).value=audio.currentTime/d*1000;
+ }
+ const loop=()=>{raf=requestAnimationFrame(loop);if(win&&win.style.display==='none')return;viz();clock()}; // minimized windows skip drawing
+ raf=requestAnimationFrame(loop);
+ /* When the window is closed the music stops and everything is cleaned up. */
+ function cleanup(){clearInterval(guard);cancelAnimationFrame(raf);stopAll();try{node&&node.disconnect();bus&&bus.disconnect();an&&an.disconnect()}catch(e){}}
+ const guard=setInterval(()=>{if(!b.isConnected)cleanup()},400);
+
+ /* ----- adding songs: Add songs button or drag and drop ----- */
+ const MIME={mp3:'audio/mpeg',ogg:'audio/ogg',oga:'audio/ogg',opus:'audio/ogg',wav:'audio/wav',m4a:'audio/mp4',aac:'audio/aac',flac:'audio/flac',weba:'audio/webm'};
+ async function addFiles(list){
+  let n=0,skipped=0;
+  for(const f of list){
+   const ext=(f.name.split('.').pop()||'').toLowerCase(),m=f.type&&f.type.startsWith('audio')?f.type:MIME[ext];
+   if(!m){skipped++;continue} // not a song
+   const d=await new Promise((ok,no)=>{const r=new FileReader();r.onload=()=>ok(r.result);r.onerror=no;r.readAsDataURL(f)});
+   const nm=safeName(f.name);let p=join(MUSIC_DIR,nm),i=2;
+   while(fs()[p]){p=join(MUSIC_DIR,nm.replace(/(\.[^.]*)?$/,' ('+i+')$1'));i++} // same name already used: add (2), (3)...
+   if(put(p,{t:'f',m,d}))n++;else break; // put() shows the "not enough space" message itself
+  }
+  refreshAll();
+  if(n)toast(n+' song'+(n===1?'':'s')+' added to Music');
+  else if(skipped)toast('Those files can’t be played here. Try MP3, WAV or OGG.');
+ }
+ $('input[type=file]',b).onchange=e=>{addFiles([...e.target.files]);e.target.value=''};
+ b.ondragover=e=>e.preventDefault();
+ b.ondrop=e=>{e.preventDefault();addFiles([...e.dataTransfer.files])};
+
+ /* ----- clicks ----- */
+ b.onclick=e=>{
+  const row=e.target.closest('.sg');if(row)return play(row.dataset.id);
+  const a=e.target.closest('[data-a]');if(!a)return;
+  ({add:()=>$('input[type=file]',b).click(),play:toggle,prev:()=>skip(-1),next:()=>skip(1),shuf:()=>{shuffle=!shuffle;paint()},rep:()=>{repeat=(repeat+1)%3;paint()}})[a.dataset.a]();
+ };
+ b.oncontextmenu=e=>{
+  const row=e.target.closest('.sg');if(!row)return;const t=lib().find(x=>x.id===row.dataset.id);if(!t)return;
+  menu(e,[['Play',()=>play(t.id)],...(t.kind==='file'?[['Move to Trash',()=>delItem(t.path)]]:[])]);
+ };
+ const seek=$('.seek',b);
+ seek.onpointerdown=()=>seeking=true;seek.onchange=()=>seeking=false;
+ seek.oninput=()=>{const d=audio.duration;if(isFinite(d)&&d>0)audio.currentTime=seek.value/1000*d};
+ const vol=$('.vol',b);
+ vol.oninput=()=>{volume=vol.value/100;if(bus)bus.gain.value=volume};
+ vol.onchange=()=>setSetting('musicVol',+vol.value); // remembered for next time
+ views.push({b,draw:sync});
+ paint();
+ if(arg&&arg[0]==='/'&&fs()[arg])play(arg); // opened from a song file
+}
 /* --- Calculator --- */
 function calcApp(b){
  const k=['C','(',')','/','7','8','9','*','4','5','6','-','1','2','3','+','0','.','⌫','='];
  b.innerHTML=`<div class="fill"><input class="d" readonly style="margin:10px;font-size:28px;text-align:right;border-radius:8px" value="0"><div class="cb">${k.map(x=>`<button ${x==='='?'class="pri"':''}>${x}</button>`).join('')}</div></div>`;
  const d=$('.d',b);let s='';
- b.onclick=e=>{const x=e.target.textContent;if(e.target.tagName!=='BUTTON')return;
+ b.onclick=e=>{const x=e.target.textContent;if(e.target.tagName!=='BUTTON')return;sfx(x==='='?'ok':x==='C'?'pop':'tick');
   if(x==='C')s='';else if(x==='⌫')s=s.slice(0,-1);
   else if(x==='='){try{if(/^[\d+\-*/.() ]+$/.test(s))s=String(+Function('"use strict";return('+s+')')().toFixed(10))}catch(err){s=''}}
   else s+=x;d.value=s||'0'};
@@ -1232,7 +1574,7 @@ function calcApp(b){
 function setSetting(k,v){const u=U();u.set=u.set||{};u.set[k]=v;persist();applySettings()}
 function applySettings(){ // pushes every setting onto the screen
  if(!me)return;const s=S(),os=$('#os'),r=document.documentElement;
- Object.assign(os.dataset,{dock:s.dock,hide:s.autohide?'1':'0',align:s.align,clock:s.clock?'1':'0',start:s.showStart?'1':'0'});
+ Object.assign(os.dataset,{dock:s.dock,hide:s.autohide?'1':'0',align:s.align,clock:s.clock?'1':'0',start:s.showStart?'1':'0',tb:s.topbar?'1':'0',clockat:s.topbar&&s.clockAt==='topbar'?'topbar':'dock'});
  os.style.setProperty('--ds',dsz()+'px');os.style.setProperty('--tk',dsz()+22+'px');
  r.style.setProperty('--fs',s.textSize+'px');r.style.setProperty('--acc',s.hc?'#ffe600':s.accent);
  os.style.zoom=s.scale/100;
@@ -1243,12 +1585,13 @@ function applySettings(){ // pushes every setting onto the screen
 }
 const fmtTime=d=>d.toLocaleTimeString([],{hour:'numeric',minute:'2-digit',...(S().secs?{second:'2-digit'}:{}),hour12:!S().h24});
 const fmtDate=d=>S().dfmt==='long'?d.toLocaleDateString([],{weekday:'short',month:'short',day:'numeric'}):d.toLocaleDateString();
-function tick(){const d=new Date();$('#tray').innerHTML=fmtTime(d)+'<br>'+fmtDate(d)}
+function tick(){const d=new Date();$('#tray').innerHTML=fmtTime(d)+'<br>'+fmtDate(d);
+ const tb=$('#tbclock');if(tb)tb.textContent=d.toLocaleDateString([],{weekday:'short',month:'short',day:'numeric'})+'  '+fmtTime(d)} // top bar clock, Mac style: Wed Nov 18  2:08 AM
 function placeSM(){ // Start menu opens next to the dock, wherever it is
  const sm=$('#sm'),os=$('#os'),d=os.dataset.dock,t=(os.dataset.hide==='1'?10:parseInt(os.style.getPropertyValue('--tk'))+10)+'px';
  Object.assign(sm.style,{left:'',right:'',top:'',bottom:'',transform:''});
  if(d==='bottom')Object.assign(sm.style,{left:'50%',bottom:t,transform:'translateX(-50%)'});
- else if(d==='top')Object.assign(sm.style,{left:'50%',top:t,transform:'translateX(-50%)'});
+ else if(d==='top')Object.assign(sm.style,{left:'50%',top:`calc(${t} + var(--tbh))`,transform:'translateX(-50%)'});
  else if(d==='left')Object.assign(sm.style,{left:t,bottom:'10px'});
  else Object.assign(sm.style,{right:t,bottom:'10px'});
 }
@@ -1261,11 +1604,40 @@ const tx=(k,l)=>row2(l,'',`<input data-k="${k}" value="${esc(S()[k])}" style="wi
 function bindSet(pg){ // one handler for every control that has data-k
  pg.onchange=pg.oninput=e=>{const k=e.target.dataset.k;if(!k)return;const el=e.target;setSetting(k,el.type==='checkbox'?el.checked:el.dataset.n?+el.value:el.value)};
  const r=$('#rset',pg);if(r)r.onclick=async()=>{if(await ask('Reset all settings to their defaults?',null)){U().set={};save();applySettings();pg.closest('.bd')._show('General');toast('Settings were reset')}};
- const t=$('#tsnd',pg);if(t)t.onclick=beep;
+ pg.querySelectorAll('[data-snd]').forEach(x=>x.onclick=()=>sfx(x.dataset.snd)); // preview buttons in Settings > Sound
  const cs=$('#csd',pg);if(cs)cs.onclick=async()=>{if(await ask('Clear the localStorage and cache that websites in Comet saved? (Your history and bookmarks stay.)',null)){await siteClearAll();toast('Saved site data cleared')}};const cb=$('#cbd',pg);if(cb)cb.onclick=async()=>{if(await ask('Clear your history and bookmarks?',null)){U().browser={history:[],bookmarks:[]};persist();toast('Browsing data cleared')}};
 }
 
-const WALLS=['radial-gradient(circle at 25% 25%,#1b6bd1,transparent 55%),radial-gradient(circle at 80% 85%,#7a3fd1,transparent 55%),#0a1330','radial-gradient(circle at 70% 20%,#ff7a59,transparent 50%),radial-gradient(circle at 20% 90%,#c2185b,transparent 55%),#2a0b3f','radial-gradient(circle at 30% 30%,#14b8a6,transparent 55%),radial-gradient(circle at 85% 80%,#1d4ed8,transparent 55%),#06222b','linear-gradient(160deg,#111827,#374151)'];
+const WALLS=['radial-gradient(circle at 25% 25%,#1b6bd1,transparent 55%),radial-gradient(circle at 80% 85%,#7a3fd1,transparent 55%),#0a1330','radial-gradient(circle at 70% 20%,#ff7a59,transparent 50%),radial-gradient(circle at 20% 90%,#c2185b,transparent 55%),#2a0b3f','radial-gradient(circle at 30% 30%,#14b8a6,transparent 55%),radial-gradient(circle at 85% 80%,#1d4ed8,transparent 55%),#06222b','linear-gradient(160deg,#111827,#374151)',
+ /* Night sky with stars (little white dots over a dark blue gradient) */
+ 'radial-gradient(1.5px 1.5px at 12% 22%,#fff,transparent),radial-gradient(1px 1px at 28% 60%,#fff,transparent),radial-gradient(2px 2px at 44% 15%,#fff,transparent),radial-gradient(1px 1px at 58% 45%,#fff,transparent),radial-gradient(1.5px 1.5px at 73% 25%,#fff,transparent),radial-gradient(1px 1px at 86% 62%,#fff,transparent),radial-gradient(2px 2px at 92% 12%,#fff,transparent),radial-gradient(1px 1px at 35% 82%,#fff,transparent),radial-gradient(1.5px 1.5px at 65% 78%,#fff,transparent),linear-gradient(180deg,#02030f,#0b1a3d 65%,#2a2370)',
+ 'linear-gradient(180deg,#1e1b4b 0%,#be185d 45%,#fb923c 72%,#fde68a 100%)', // Sunset
+ 'radial-gradient(ellipse at 20% 10%,#22d3ee88,transparent 55%),radial-gradient(ellipse at 80% 30%,#a855f788,transparent 55%),radial-gradient(ellipse at 50% 95%,#22c55e66,transparent 55%),#04101f', // Aurora
+ 'linear-gradient(180deg,#38bdf8,#1d4ed8 55%,#0b1030)', // Ocean
+ 'linear-gradient(160deg,#052e16,#166534 60%,#a3e635)', // Forest
+ 'linear-gradient(135deg,#f9a8d4,#a5b4fc 55%,#67e8f9)', // Cotton candy
+ 'radial-gradient(circle at 50% 115%,#fde047,#f97316 30%,#7f1d1d 62%,#1c0a0a)' // Lava
+];
+/* Photo wallpapers. They are added to the end of WALLS so they work like the others.
+   When you pick one, the OS tries to save a copy in Pictures/Wallpapers so it still works offline.
+   If the copy cannot be made, the picture loads straight from the web address instead. */
+const PHOTO_BASE=WALLS.length; // the first photo wallpaper sits at this number in WALLS
+const PHOTO_WALLS=[
+ {n:'Photo 1',u:'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTJ4s3p0CYZc9Y5FGI1kM9SLn10SlsfNvfeYCev6-JFHqSr4QojPu0LDsI&s=10'},
+ {n:'Photo 2',u:'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQCZvNGwhyd2AaA06gvQfuyf-HpI-ynlbMSiUIvSsJ6YbrTczgIS7vvlEwI&s=10'},
+ {n:'Photo 3',u:'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTGJjx4pdSF2SlOTXzIsUMCnyfMeRGM4E84gMHBNIAQlwDjWlsYUN4mR1o&s=10'}
+];
+PHOTO_WALLS.forEach(w=>WALLS.push("url('"+w.u+"') center/cover no-repeat,#0a1330")); // the web address version (used as the fallback)
+async function pickPhotoWall(i){
+ const w=PHOTO_WALLS[i],p='/Pictures/Wallpapers/'+w.n+'.jpg';
+ if(U().fs[p]){setWall(p);return} // already saved on this PC
+ try{
+  const r=await fetch(w.u);if(!r.ok)throw 0;
+  const bl=await r.blob(),d=await new Promise((ok,no)=>{const f=new FileReader();f.onload=()=>ok(f.result);f.onerror=no;f.readAsDataURL(bl)});
+  if(put(p,{t:'f',m:bl.type||'image/jpeg',d})){setWall(p);refreshAll();return}
+ }catch(e){}
+ U().wallImg=null;U().wall=PHOTO_BASE+i;save();applyWall();toast('Desktop background changed. This one loads from the web, so it needs internet.');
+}
 function importBox(el,done){ // restore UI used by setup and Settings
  el.innerHTML=`<p style="color:var(--dim);margin-top:0">Choose a backup file or paste its contents, then enter the backup password.</p><input type="file" accept=".json,application/json" style="width:100%"><textarea rows="3" placeholder="Or paste backup text here"></textarea><input type="password" placeholder="Backup password" style="width:100%;margin:6px 0"><button class="pri im">Restore</button>`;
  $('.im',el).onclick=async()=>{
@@ -1284,8 +1656,8 @@ function settingsApp(b,tab){
  const pages={
   General:()=>`<h2 style="margin-top:0">General</h2><div class="card">${tx('device','Device name')}${tg('h24','24-hour clock')}${tg('secs','Show seconds in the clock')}${sc('dfmt','Date format',[['short','Short'],['long','Long']])}${tg('maxWin','Open windows maximized')}${tg('confirmDel','Ask before moving items to the Trash')}</div><button id="rset">Reset all settings</button>`,
   Display:()=>`<h2 style="margin-top:0">Display</h2><div class="card">${sl('brightness','Brightness',10,100,5)}${sc('scale','Interface size',[[80,'80%'],[90,'90%'],[100,'100% (recommended)'],[110,'110%'],[125,'125%'],[140,'140%']],1)}${tg('night','Night light','Warms the screen colors')}${sl('nightAmt','Night light strength',10,100,5)}</div>`,
-  Sound:()=>`<h2 style="margin-top:0">Sound</h2><div class="card">${tg('sounds','System sounds','A short sound when apps open')}${sl('volume','Volume',0,100,5)}</div><button id="tsnd">Play a test sound</button>`,
-  Dock:()=>`<h2 style="margin-top:0">Dock</h2><div class="card">${sc('dock','Position on screen',[['bottom','Bottom'],['top','Top'],['left','Left'],['right','Right']])}${sc('dockSize','Icon size',[['s','Small'],['m','Medium'],['l','Large']])}${sc('align','Alignment',[['center','Center'],['start','Start']])}${tg('autohide','Automatically hide the dock','Move the pointer to the screen edge to show it')}${tg('showStart','Show the Start button')}${tg('clock','Show date and time')}</div>`,
+  Sound:()=>`<h2 style="margin-top:0">Sound</h2><div class="card">${tg('sounds','System sounds','Sounds for windows, menus, messages, the Trash and more')}${sl('volume','Volume',0,100,5)}</div><p>Try the sounds</p><div style="display:flex;flex-wrap:wrap;gap:6px">${[['open','Open'],['close','Close'],['min','Minimize'],['max','Maximize'],['click','Click'],['notify','Message'],['error','Error'],['ask','Question'],['install','Installed'],['trash','Trash'],['restore','Restore'],['startup','Sign in'],['shutdown','Sign out']].map(x=>`<button data-snd="${x[0]}">${x[1]}</button>`).join('')}</div>`,
+  Dock:()=>`<h2 style="margin-top:0">Dock</h2><div class="card">${sc('dock','Position on screen',[['bottom','Bottom'],['top','Top'],['left','Left'],['right','Right']])}${sc('dockSize','Icon size',[['s','Small'],['m','Medium'],['l','Large']])}${sc('align','Alignment',[['center','Center'],['start','Start']])}${tg('autohide','Automatically hide the dock','Move the pointer to the screen edge to show it')}${tg('showStart','Show the Start button')}${tg('clock','Show date and time')}</div><h3 style="margin:18px 0 6px">Topbar</h3><div class="card">${tg('topbar','Show the topbar','A menu bar across the top of the screen, like on a Mac. It stays above the dock, even when the dock is at the top.')}${sc('clockAt','Date and time go in',[['topbar','Topbar'],['dock','Dock']],0,'Used while the topbar is on. With it off, the clock stays in the dock.')}</div>`,
   Accessibility:()=>`<h2 style="margin-top:0">Accessibility</h2><div class="card">${sc('textSize','Text size',[[13,'Small'],[14,'Default'],[16,'Large'],[18,'Larger'],[20,'Largest']],1)}${tg('hc','High contrast')}${tg('rm','Reduce motion','Turns off animations and transitions')}${tg('bigcur','Large mouse pointer')}${sc('filter','Color filter',[['none','None'],['gray','Grayscale'],['invert','Inverted'],['vivid','Vivid colors']])}</div>`,
   Notifications:()=>`<h2 style="margin-top:0">Notifications</h2><div class="card">${tg('notif','Show notifications','Messages like “Saved” or “Moved to Trash”. Warnings always show.')}${sc('dur','Show for',[[2,'2 seconds'],[3,'3 seconds'],[5,'5 seconds'],[8,'8 seconds']],1)}</div>`,
   Update:()=>`<h2 style="margin-top:0">Software update</h2><div class="card"><b>AmogOs ${OS_VERSION}</b><div id="us" style="color:var(--dim);margin:6px 0 12px">Checking…</div><div class="uprog" id="ubw" hidden><i id="ub"></i></div><button class="pri" id="uc">Check for updates</button> <button id="ui" hidden>Install update</button> <button id="uk" hidden>Cancel restart</button></div><div class="card">${tg('autoUpdate','Check for updates when AmogOs starts','A notification appears when a new version is out')}</div><div class="card">${IN_LAUNCHER?'<b>Reinstall AmogOs</b><p style="color:var(--dim)">If something looks wrong, download a fresh copy of AmogOs. Your accounts and files are kept.</p><button id="ur">Reinstall AmogOs</button>':'<b>Built-in version</b><p style="color:var(--dim)">If an update ever causes trouble, you can remove it and go back to the version this file came with.</p><button id="ur">Go back to the built-in version</button>'}</div>`,
@@ -1295,14 +1667,14 @@ function settingsApp(b,tab){
   Browser:()=>`<h2 style="margin-top:0">Browser</h2><div class="card">${sc('engine','Default search engine',Object.keys(ENGINES).map(k=>[k,ENGINES[k][0]]))}${row2('Page fetcher address','Your Supabase edge function. It downloads pages for Comet so sites that block frames still open.',`<input data-k="edgeUrl" value="${esc(S().edgeUrl)}" placeholder="https://YOUR-PROJECT.supabase.co/functions/v1/fetch-page" style="width:260px">`)}${row2('Supabase anon key','Only needed if your function checks logins',`<input data-k="edgeKey" type="password" value="${esc(S().edgeKey)}" style="width:260px">`)}${row2('Custom proxy (advanced)','Used only when no page fetcher is set. Put {url} where the page address goes',`<input data-k="proxy" value="${esc(S().proxy)}" placeholder="https://your-proxy.example/?u={url}" style="width:260px">`)}</div><button id="cbd">Clear history and bookmarks</button> <button id="csd">Clear saved site data</button>`,
   Apps:()=>`<h2 style="margin-top:0">Apps</h2><div class="card">${tg('startApps','Show installed apps in the Start menu')}${row2('Store sources','Addresses of app catalogs, separated by commas',`<input data-k="storeSrc" value="${esc(S().storeSrc)}" style="width:260px">`)}</div><p style="color:var(--dim)">Apps you open or install are kept in the Applications folder.</p>`,
   Personalization:()=>{const u=U(),imgs=Object.keys(u.fs).filter(k=>u.fs[k].m&&u.fs[k].m.startsWith('image'));
-   return`<h2 style="margin-top:0">Personalization</h2><p>Background</p>${WALLS.map((w,i)=>`<div class="wp ${!u.wallImg&&(u.wall||0)===i?'on':''}" data-w="${i}" style="background:${w}"></div>`).join('')}<p>Accent color</p>${ACC.map(c=>`<span class="sw2 ${S().accent===c?'on':''}" data-acc="${c}" style="background:${c}"></span>`).join('')}<p>Your pictures</p>${imgs.map(k=>`<div class="wp ${u.wallImg===k?'on':''}" data-img="${esc(k)}" title="${esc(base(k))}" style="background-image:url('${u.fs[k].d}')"></div>`).join('')||'<p style="color:var(--dim)">No pictures yet. Browse for one below.</p>'}<br><button class="pri" id="bp">Browse for a picture</button>`},
-  Accounts:()=>`<h2 style="margin-top:0">Accounts</h2><div class="card" style="display:flex;gap:14px;align-items:center"><span class="av" style="width:56px;height:56px;font-size:24px">${esc(me[0].toUpperCase())}</span><div><b>${esc(me)}</b><br><span style="color:var(--dim)">Local account</span></div></div><button id="lo">Sign out</button> <button id="cpw">Change password</button> <button id="dl">Remove this account</button>`,
+   return`<h2 style="margin-top:0">Personalization</h2><p>Background</p>${WALLS.map((w,i)=>(i===PHOTO_BASE?'<p>Photos</p>':'')+`<div class="wp ${!u.wallImg&&(u.wall||0)===i?'on':''}" data-w="${i}" style="background:${w}"></div>`).join('')}<p>Accent color</p>${ACC.map(c=>`<span class="sw2 ${S().accent===c?'on':''}" data-acc="${c}" style="background:${c}"></span>`).join('')}<p>Your pictures</p>${imgs.map(k=>`<div class="wp ${u.wallImg===k?'on':''}" data-img="${esc(k)}" title="${esc(base(k))}" style="background-image:url('${u.fs[k].d}')"></div>`).join('')||'<p style="color:var(--dim)">No pictures yet. Browse for one below.</p>'}<br><button class="pri" id="bp">Browse for a picture</button>`},
+  Accounts:()=>`<h2 style="margin-top:0">Accounts</h2><div class="card" style="display:flex;gap:14px;align-items:center">${avHtml(me,56)}<div><b>${esc(me)}</b><br><span style="color:var(--dim)">Local account</span></div></div><div class="card"><b>Profile picture</b><p style="color:var(--dim);margin:4px 0 8px">Pick a picture from this PC, upload one, or use a picture from the internet.</p><div>${pfpTiles()}</div><br><button class="pri" id="pfu">Upload a picture</button> <button id="pfw">Use an online picture</button> <button id="pfx">Remove picture</button><input type="file" id="pff" accept="image/*" hidden></div><button id="lo">Sign out</button> <button id="cpw">Change password</button> <button id="dl">Remove this account</button>`,
   Backup:()=>`<h2 style="margin-top:0">Backup and restore</h2><div class="card"><b>Back up your files</b><p style="color:var(--dim)">Saves your account and all files into one password-protected file.</p><input id="ep" type="password" placeholder="Choose a password"> <button class="pri" id="ex">Back up now</button><textarea id="eo" rows="3" hidden style="margin-top:8px"></textarea></div><div class="card"><b>Restore from a backup</b><div id="imp" style="margin-top:8px"></div></div>`,
   Activation:()=>`<h2 style="margin-top:0">Activation</h2><div class="card"><b>Storage plan: ${gbName(U().gb)}</b><p style="color:var(--dim)">Enter a product key to change your storage plan.</p><input id="pk" placeholder="XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX" style="width:100%"><br><br><button class="pri" id="ak">Activate</button></div>`
  };
  const show=t=>{
   pg.innerHTML=pages[t]();bindSet(pg);b.querySelectorAll('.side div').forEach(d=>d.classList.toggle('on',d.dataset.t===t));
-  if(t==='Accounts'){$('#lo',pg).onclick=logout;$('#cpw',pg).onclick=async()=>{const v=await ask('New password (leave blank for none)','');if(v===null)return;U().h=await sha(v+me);U().blank=!v;save();toast(v?'Password changed':'Password removed')};$('#dl',pg).onclick=async()=>{if(await ask('Remove this account and all of its files?',null)){delete DB.users[me];persist();logout()}}}
+  if(t==='Accounts'){acctPfp(pg,()=>show(t));$('#lo',pg).onclick=logout;$('#cpw',pg).onclick=async()=>{const v=await ask('New password (leave blank for none)','');if(v===null)return;U().h=await sha(v+me);U().blank=!v;save();toast(v?'Password changed':'Password removed')};$('#dl',pg).onclick=async()=>{if(await ask('Remove this account and all of its files?',null)){delete DB.users[me];persist();logout()}}}
   if(t==='Update')bindUpdate(pg);
   if(t==='Activation')$('#ak',pg).onclick=()=>{const g=KEYS[$('#pk',pg).value.trim().toLowerCase()];if(!g)return toast('That product key isn’t valid.');U().gb=g;save();toast('Activated: '+gbName(g)+' storage');show('Activation')};
   if(t==='Backup'){
@@ -1311,7 +1683,7 @@ function settingsApp(b,tab){
   }
   if(t==='Personalization'){
    $('#bp',pg).onclick=()=>$('#wpf').click();
-   pg.onclick=e=>{const w=e.target.dataset.w,im=e.target.dataset.img,ac=e.target.dataset.acc;if(ac){setSetting('accent',ac);show(t)}else if(w!=null){U().wallImg=null;U().wall=+w;save();applyWall();show(t)}else if(im){setWall(im);show(t)}};
+   pg.onclick=e=>{const w=e.target.dataset.w,im=e.target.dataset.img,ac=e.target.dataset.acc;if(ac){setSetting('accent',ac);show(t)}else if(w!=null){if(+w>=PHOTO_BASE)pickPhotoWall(+w-PHOTO_BASE).then(()=>show(t));else{U().wallImg=null;U().wall=+w;save();applyWall();show(t)}}else if(im){setWall(im);show(t)}};
   }
  };
  b.querySelector('.side').onclick=e=>{const d=e.target.closest('[data-t]');if(d)show(d.dataset.t)};
@@ -1326,6 +1698,7 @@ const APPS=[
  {n:'Paint',i:'paint',r:(b)=>paintApp(b),w:920,h:600},
  {n:'Comet',i:'globe',r:(b,a)=>browserApp(b,a),w:920,h:580},
  {n:'Store',i:'store',r:(b)=>storeApp(b),w:760,h:520},
+ {n:'Music',i:'music',r:(b,a)=>musicApp(b,a),w:720,h:460},
  {n:'Calculator',i:'calc',r:(b)=>calcApp(b),w:300,h:400},
  {n:'Trash',i:'trash',hide:true,r:(b)=>trashApp(b),w:540,h:380},
  {n:'Settings',i:'gear',r:(b,a)=>settingsApp(b,a),w:780,h:500}
@@ -1341,12 +1714,107 @@ function renderDesk(){ // desktop shows app shortcuts plus everything saved in /
  if(!me)return;const fs=U().fs,files=Object.keys(fs).filter(p=>parent(p)==='/Desktop').sort();
  $('#icons').innerHTML=`<div class="ic" data-app="Trash">${ic((U().trash||[]).length?'trashfull':'trash',42)}Trash</div>`+APPS.filter(a=>!a.hide).slice(0,5).map(a=>`<div class="ic" data-app="${a.n}">${ic(a.i,42)}${a.n}</div>`).join('')+files.map(p=>`<div class="ic" data-p="${esc(p)}">${fileIcon(p,42)}${esc(label(p))}</div>`).join('');
 }
+/* ================= Profile pictures =================
+   U().pfp is either a file path on this PC (starts with "/") or a web address (starts with "http").
+   Pictures from the web are saved into Pictures when the site allows it, so they keep working offline. */
+const pfpSrc=u=>{const p=u&&u.pfp;if(!p)return'';return p[0]==='/'?((u.fs[p]||{}).d||''):p}; // the picture's address, or '' to show the letter
+function avHtml(name,px){ // the round avatar for any account: its picture, or the first letter on a colored circle
+ const s=pfpSrc(DB.users[name]).replace(/'/g,'%27').replace(/"/g,'%22');
+ return`<span class="av" style="width:${px}px;height:${px}px;font-size:${Math.round(px*.42)}px${s?`;background:url('${s}') center/cover no-repeat`:''}">${s?'':esc(name[0].toUpperCase())}</span>`;
+}
+const uniquePath=p=>{let q=p,i=2;while(U().fs[q]){q=p.replace(/(\.[^.]*)?$/,' ('+i+')$1');i++}return q}; // adds (2), (3)... when the name is taken
+const pfpTiles=()=>{const u=U(),imgs=Object.keys(u.fs).filter(k=>u.fs[k].m&&u.fs[k].m.startsWith('image')&&u.fs[k].d);
+ return imgs.map(k=>`<div class="wp ${u.pfp===k?'on':''}" data-pf="${esc(k)}" title="${esc(base(k))}" style="background-image:url('${u.fs[k].d}')"></div>`).join('')||'<p style="color:var(--dim)">No pictures on this PC yet. Upload one below.</p>'};
+async function pfpFromUrl(u,set){ // online picture: save a copy if possible, otherwise use the link itself
+ if(!/^https?:\/\//i.test(u))return toast('Enter a link that starts with https://');
+ try{
+  const r=await fetch(u);if(!r.ok)throw 0;const bl=await r.blob();if(!bl.type.startsWith('image'))throw 0;
+  const d=await new Promise((ok,no)=>{const f=new FileReader();f.onload=()=>ok(f.result);f.onerror=no;f.readAsDataURL(bl)});
+  const ext={'image/jpeg':'jpg','image/gif':'gif','image/webp':'webp','image/svg+xml':'svg'}[bl.type]||'png',p=uniquePath('/Pictures/Profile picture.'+ext);
+  if(put(p,{t:'f',m:bl.type,d}))return set(p);
+ }catch(e){}
+ const ok=await new Promise(res=>{const im=new Image();im.onload=()=>res(true);im.onerror=()=>res(false);im.src=u}); // the site blocked the copy: can the link still show as a picture?
+ if(ok){set(u);toast('Using the picture from the web. It needs internet to show.')}else toast('That link couldn’t be loaded as a picture.');
+}
+function acctPfp(pg,redo){ // wires up the Profile picture card on the Accounts page. redo() redraws the page.
+ const set=v=>{U().pfp=v;save();refreshAll();paintTopbar();redo()};
+ pg.querySelectorAll('[data-pf]').forEach(x=>x.onclick=()=>set(x.dataset.pf)); // a picture already on this PC
+ $('#pfu',pg).onclick=()=>$('#pff',pg).click();
+ $('#pff',pg).onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f||!f.type.startsWith('image'))return;
+  const r=new FileReader();r.onload=()=>{const p=uniquePath('/Pictures/'+safeName(f.name));if(put(p,{t:'f',m:f.type,d:r.result}))set(p)};r.readAsDataURL(f)};
+ $('#pfw',pg).onclick=async()=>{const v=await ask('Picture link (starts with https://)','');if(v&&v.trim())pfpFromUrl(v.trim(),set)};
+ $('#pfx',pg).onclick=()=>{delete U().pfp;save();refreshAll();paintTopbar();redo()};
+}
+
+/* ================= Topbar (macOS style menu bar) =================
+   Left: logo menu, front app name, File / Edit / View / Window / Help. Right: sounds switch, account, date and time.
+   Turn it on in Settings > Dock. paintTopbar() is called by paintPins(), so it follows every window change. */
+const AMOG_LOGO='<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M8 3h8a3 3 0 0 1 3 3v9.5a2 2 0 0 1-.6 1.4V20a1 1 0 0 1-1 1h-3a1 1 0 0 1-1-1v-1.5h-3.8V20a1 1 0 0 1-1 1H6.6a1 1 0 0 1-1-1v-3.1A2 2 0 0 1 5 15.5V6a3 3 0 0 1 3-3z"/><rect x="9" y="6.2" width="9" height="5" rx="2.5" fill="#1b1b1b"/></svg>';
+const frontWin=()=>[...document.querySelectorAll('#desk .win')].filter(w=>w.style.display!=='none').sort((a,b)=>b.style.zIndex-a.style.zIndex)[0]; // the window on top
+function paintTopbar(){
+ const os=$('#os');if(!me||os.dataset.tb!=='1')return;
+ const f=frontWin(),name=f?((dockInfo[f.dataset.app]||{}).name||f.dataset.app):'Desktop';
+ $('#topbar').innerHTML=`<button data-m="logo" title="AmogOs">${AMOG_LOGO}</button><b class="tb-app">${esc(name)}</b>`+['File','Edit','View','Window','Help'].map(m=>`<button data-m="${m}">${m}</button>`).join('')
+  +`<span style="flex:1"></span><button data-m="snd" title="Sounds ${S().sounds?'on':'off'}" style="opacity:${S().sounds?1:.45}">${ic('speaker',16)}</button><button data-m="user" title="${esc(me)}">${avHtml(me,18)}</button><span id="tbclock"></span>`;
+ tick();
+}
+function tbItems(m){ // the entries of each top bar menu
+ const f=frontWin(),key=f&&f.dataset.app,name=f?((dockInfo[key]||{}).name||key):'AmogOs',wins=[...document.querySelectorAll('#desk .win')];
+ const edit=c=>()=>document.execCommand(c); // works on the text box you were typing in (the top bar never steals focus)
+ return{
+  logo:[['About AmogOs',()=>openApp('Settings','Update')],['Settings',()=>openApp('Settings')],['Store',()=>openApp('Store')],'-',['Sign out',logout]],
+  File:[['New window',()=>openApp(APPS.some(a=>a.n===key)?key:'Files')],['Close window',()=>f&&$('.x',f).click()],'-',['Quit '+name,()=>key&&closeAll(key)]],
+  Edit:[['Undo',edit('undo')],['Redo',edit('redo')],'-',['Cut',edit('cut')],['Copy',edit('copy')],
+   ['Paste',()=>navigator.clipboard.readText().then(t=>document.execCommand('insertText',false,t)).catch(()=>toast('Paste isn’t allowed here. Press Ctrl+V instead.'))],['Select all',edit('selectAll')]],
+  View:[[document.fullscreenElement?'Exit full screen':'Enter full screen',()=>document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen()],
+   ['Show desktop',()=>{wins.forEach(w=>w.style.display='none');paintPins()}],['Refresh desktop',renderDesk]],
+  Window:[['Minimize',()=>f&&$('.mn',f).click()],['Zoom',()=>f&&$('.mx',f).click()],...(wins.length?['-']:[]),
+   ...wins.slice(0,12).map(w=>[$('.t',w).textContent,()=>{w.style.display='';w.style.zIndex=++z;paintPins()}])],
+  Help:[['About AmogOs',()=>openApp('Settings','Update')],['AmogOs on GitHub',()=>window.open('https://github.com/FallGameDev/AmogOs','_blank')]],
+  user:[[me,()=>openApp('Settings','Accounts')],'-',['Account settings',()=>openApp('Settings','Accounts')],['Sign out',logout]]
+ }[m]||[];
+}
+$('#topbar').onmousedown=e=>e.preventDefault(); // keep the cursor in whatever text box you were using
+$('#topbar').onclick=e=>{
+ const b=e.target.closest('[data-m]');if(!b)return;const m=b.dataset.m;
+ if(m==='snd'){setSetting('sounds',!S().sounds);toast(S().sounds?'Sounds are on':'Sounds are off');return}
+ const r=b.getBoundingClientRect(); // open the menu right under the button
+ menu({clientX:r.left,clientY:r.bottom,preventDefault:()=>e.preventDefault(),stopPropagation:()=>e.stopPropagation()},tbItems(m));
+};
+$('#cm').addEventListener('mousedown',e=>e.preventDefault()); // menu clicks should not take focus away from a text box either
+
+/* ----- Dock: pinned apps stay when closed, any other app that is open shows up too and leaves when it is quit -----
+   A "pin" is a short key: the app name for built-in apps, or "amo:" plus the file path for installed apps. */
+const getPins=()=>U().pins||APPS.filter(a=>!a.hide).map(a=>a.n); // nobody has chosen yet: every normal app is pinned
+function dockEntry(pin){ // describes one dock item from its pin key (null if the app was removed)
+ if(pin.startsWith('amo:')){const p=pin.slice(4),m=isAmo(p)&&amoMeta(p);return m?{pin,n:'App:'+(m.id||m.name),name:m.name||base(p),img:m.icon}:null}
+ const a=APPS.find(x=>x.n===pin);return a?{pin,n:a.n,name:a.n,i:a.i}:null;
+}
+const dockWins=n=>(running[n]||[]).filter(e=>e.isConnected);
 function paintPins(){
- $('#pins').innerHTML=`<div class="tbtn" data-n="_s">${ic('win',dsz()-2)}</div>`+APPS.filter(a=>!a.hide).map(a=>{const w=(running[a.n]||[]).filter(e=>e.isConnected),act=w.some(e=>e.style.display!=='none'&&+e.style.zIndex===z);return`<div class="tbtn ${w.length?'run':''} ${act?'act':''}" data-n="${a.n}" title="${a.n}">${ic(a.i,dsz())}</div>`}).join('');
+ const items=[],seen={};
+ getPins().forEach(pin=>{const d=dockEntry(pin);if(d){items.push(Object.assign(d,{pinned:true}));seen[d.n]=1}});
+ Object.keys(running).forEach(n=>{ // open apps that are not pinned
+  if(seen[n]||!dockWins(n).length)return;const i=dockInfo[n]||{};items.push({pin:i.pin||n,n,name:i.name||n,i:i.i||'app',img:i.img,pinned:false});
+ });
+ $('#pins').innerHTML=`<div class="tbtn" data-n="_s">${ic('win',dsz()-2)}</div>`+items.map(d=>{
+  const w=dockWins(d.n),act=w.some(e=>e.style.display!=='none'&&+e.style.zIndex===z),s=dsz();
+  const icon=d.img?`<span class="i" style="width:${s}px;height:${s}px"><img src="${d.img}" style="width:100%;height:100%;border-radius:20%;object-fit:cover"></span>`:ic(d.i,s);
+  return`<div class="tbtn ${w.length?'run':''} ${act?'act':''}" data-n="${esc(d.n)}" data-pin="${esc(d.pin)}" title="${esc(d.name)}">${icon}</div>`}).join('');
+ paintTopbar();
+}
+function togglePin(pin){ // Pin to dock / Unpin from dock
+ const l=getPins().slice(),i=l.indexOf(pin);if(i<0)l.push(pin);else l.splice(i,1);
+ U().pins=l;persist();paintPins();
+}
+function hideApp(n){ // hides every window of the app (click its dock icon to bring them back)
+ const w=dockWins(n);if(!w.length)return;sfx('min');
+ const anyShown=w.some(e=>e.style.display!=='none');
+ w.forEach(e=>{e.style.display=anyShown?'none':'';if(!anyShown)e.style.zIndex=++z});paintPins();
 }
 const closeAll=n=>[...(running[n]||[])].forEach(el=>$('.x',el).click());
 function boot(){
- $('#login').style.display='none';$('#os').style.display='block';applyWall();
+ $('#login').style.display='none';$('#os').style.display='block';applyWall();sfx('startup');
  for(const k in running)delete running[k];$('#desk').querySelectorAll('.win').forEach(w=>w.remove());
  renderStart();ensureApps();
  renderDesk();paintPins();applySettings();
@@ -1362,11 +1830,19 @@ $('#icons').oncontextmenu=e=>{const t=e.target.closest('.ic');
  else menu(e,[['New folder',()=>newItem('/Desktop','d')],['New text document',()=>newItem('/Desktop','f')],'-',['Change background',()=>openApp('Settings','Personalization')],['Refresh',renderDesk],['Settings',()=>openApp('Settings')]])};
 /* Taskbar: one click launches an app, or shows/hides it if it is already open */
 $('#pins').onclick=e=>{const n=e.target.closest('[data-n]')?.dataset.n;if(!n)return;
- if(n==='_s'){const s=$('#sm');renderStart();placeSM();s.style.display=s.style.display==='block'?'none':'block';return}
- $('#sm').style.display='none';const w=(running[n]||[]).filter(x=>x.isConnected);
- if(!w.length)return openApp(n);
+ if(n==='_s'){const s=$('#sm');renderStart();placeSM();s.style.display=s.style.display==='block'?'none':'block';sfx('start');return}
+ $('#sm').style.display='none';const w=(running[n]||[]).filter(x=>x.isConnected),pin=e.target.closest('[data-n]').dataset.pin||n;
+ if(!w.length)return pin.startsWith('amo:')?amoRun(pin.slice(4)):openApp(n);
  const el=w[w.length-1];if(el.style.display==='none'||+el.style.zIndex<z){el.style.display='';el.style.zIndex=++z}else el.style.display='none';paintPins()};
-$('#pins').oncontextmenu=e=>{const n=e.target.closest('[data-n]')?.dataset.n;if(!n||n==='_s')return;menu(e,[['Open',()=>openApp(n)],['Close all windows',()=>closeAll(n)]])};
+$('#pins').oncontextmenu=e=>{
+ const t=e.target.closest('[data-n]'),n=t&&t.dataset.n;if(!n||n==='_s')return;
+ const pin=t.dataset.pin||n,w=dockWins(n),pinned=getPins().includes(pin),hidden=w.length&&w.every(x=>x.style.display==='none');
+ menu(e,[
+  ...(w.length?[]:[['Open',()=>pin.startsWith('amo:')?amoRun(pin.slice(4)):openApp(n)]]),
+  [pinned?'Unpin from dock':'Pin to dock',()=>togglePin(pin)],
+  ...(w.length?[[hidden?'Show':'Hide',()=>hideApp(n)],['Quit',()=>closeAll(n)]]:[])
+ ]);
+};
 $('#task').oncontextmenu=e=>menu(e,[['Settings',()=>openApp('Settings')]]);
 /* Start menu: one click opens an app */
 $('#sm').onclick=e=>{const am=e.target.closest('[data-amo]');if(am){$('#sm').style.display='none';return amoRun(am.dataset.amo)}const t=e.target.closest('[data-n]');if(!t)return;const n=t.dataset.n;
@@ -1375,14 +1851,14 @@ $('#sm').onclick=e=>{const am=e.target.closest('[data-amo]');if(am){$('#sm').sty
 $('#sm').oncontextmenu=e=>{const n=e.target.closest('.g div')?.dataset.n;if(n)menu(e,[['Open',()=>{$('#sm').style.display='none';openApp(n)}]])};
 $('#desk').onpointerdown=()=>$('#sm').style.display='none';
 setInterval(tick,1000);
-function logout(){me=null;$('#dim').style.opacity=0;$('#night').style.opacity=0;const h=document.documentElement;h.dataset.hc=h.dataset.rm=h.dataset.bc='0';h.style.setProperty('--acc','#4cc2ff');h.style.setProperty('--fs','14px');$('#os').style.display='none';loginScreen()}
+function logout(){sfx('shutdown');me=null;$('#dim').style.opacity=0;$('#night').style.opacity=0;const h=document.documentElement;h.dataset.hc=h.dataset.rm=h.dataset.bc='0';h.style.setProperty('--acc','#4cc2ff');h.style.setProperty('--fs','14px');$('#os').style.display='none';loginScreen()}
 
 /* ================= Sign-in and account setup ================= */
 function loginScreen(auto){const names=Object.keys(DB.users);if(names.length)lockScreen(names[0],auto&&names.length===1);else oobe(0)}
 function lockScreen(sel,auto){const bl=DB.users[sel].blank;if(auto&&bl){me=sel;return boot()}
  const L=$('#login'),names=Object.keys(DB.users),d=new Date();L.style.display='block';
  L.innerHTML=`<div class="center"><div style="font-size:64px;font-weight:300">${d.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}</div><div style="margin-bottom:34px;color:var(--dim)">${d.toLocaleDateString([],{weekday:'long',month:'long',day:'numeric'})}</div>
- <span class="av" style="width:110px;height:110px;font-size:46px">${esc(sel[0].toUpperCase())}</span><h2 style="font-weight:400;margin:12px 0">${esc(sel)}</h2>
+ ${avHtml(sel,110)}<h2 style="font-weight:400;margin:12px 0">${esc(sel)}</h2>
  ${bl?'<button class="pri" id="si" style="width:140px;justify-content:center">Sign in</button>':'<div style="display:flex;gap:6px"><input id="pw" type="password" placeholder="Password" autofocus><button class="pri" id="si" style="width:44px;justify-content:center">→</button></div>'}
  <div style="margin-top:26px;display:flex;gap:8px;flex-wrap:wrap;justify-content:center">${names.filter(n=>n!==sel).map(n=>`<button data-u="${esc(n)}">${esc(n)}</button>`).join('')}<button data-u="_new">Add user</button></div></div>`;
  const go=async()=>{const u=DB.users[sel];if(u.blank||u.h===await sha($('#pw').value+sel)){me=sel;boot()}else toast('The password is incorrect. Try again.')};
