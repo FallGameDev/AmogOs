@@ -321,7 +321,7 @@ const enc=new TextEncoder(),dec=new TextDecoder();
 /* ----- Settings store: per-user, with defaults ----- */
 const OS_VERSION=(document.querySelector('meta[name=amogos-version]')||{}).content||'1.3.0',OS_REPO='FallGameDev/OS.Lite'; // the version is the <meta name=amogos-version> tag at the top of this file
 const STORE_RAW='https://raw.githubusercontent.com/FallGameDev/OS.Lite/main/apps/'; // app packages live in the apps folder of OS.Lite
-const DEF={device:'AMOG-PC',h24:false,secs:false,dfmt:'short',confirmDel:false,maxWin:false,brightness:100,scale:100,night:false,nightAmt:30,sounds:true,volume:60,dock:'bottom',dockSize:'m',align:'center',autohide:false,clock:true,showStart:true,textSize:14,hc:false,rm:false,bigcur:false,filter:'none',notif:true,dur:3,accent:'#4cc2ff',engine:'google',edgeUrl:'https://mcqpodbwtwhjhkycwhzf.supabase.co/functions/v1/fetch-page',edgeKey:'',proxy:'',storeSrc:'',startApps:true,autoUpdate:true,topbar:false,clockAt:'topbar'};
+const DEF={device:'AMOG-PC',h24:false,secs:false,dfmt:'short',confirmDel:false,maxWin:false,brightness:100,scale:100,night:false,nightAmt:30,sounds:true,volume:60,dock:'bottom',dockSize:'m',align:'center',autohide:false,clock:true,showStart:true,textSize:14,hc:false,rm:false,bigcur:false,filter:'none',notif:true,dur:3,accent:'#4cc2ff',engine:'google',edgeUrl:'https://mcqpodbwtwhjhkycwhzf.supabase.co/functions/v1/fetch-page',edgeKey:'',proxy:'',storeSrc:'',startApps:true,autoUpdate:true,topbar:false,clockAt:'topbar',autoInstall:false};
 const S=()=>Object.assign({},DEF,me&&U()?U().set:{});
 const DS={s:22,m:26,l:32},dsz=()=>DS[S().dockSize]||26;
 const ACC=['#4cc2ff','#8b5cf6','#ec4899','#f97316','#22c55e','#eab308','#ef4444'];
@@ -1239,7 +1239,7 @@ async function checkUpdate(silent){
   const a=as.find(x=>/core.*\.html?$/i.test(x.name))||as.find(x=>/amogos.*\.html?$/i.test(x.name)&&!/^amogos\.html$/i.test(x.name)); // AmogOs-Core.html is the OS; AmogOs.html is the launcher
   upd={tag:String(j.tag_name).replace(/^v/i,''),notes:j.body||'',size:a?a.size:0,api:a?a.url:'',url:a?a.browser_download_url:'https://github.com/'+OS_REPO+'/releases/download/'+j.tag_name+'/AmogOs-Core.html'};
   upd.isNew=isNewer(upd.tag,OS_VERSION)&&localStorage.getItem('amogos.badTag')!==upd.tag; // badTag: a release whose file had the wrong version
-  if(upd.isNew&&silent)showUpdateNotice();
+  if(upd.isNew&&silent)showUpdateNotice(!!S().autoInstall);
   return upd;
  }catch(e){if(!silent)toast('Couldn’t check for updates. Check your internet connection.');return null}
 }
@@ -1295,12 +1295,45 @@ async function installUpdate(onProg){ // saves the release url + code; the patch
  localStorage.removeItem('amogos.boot');
 }
 async function resetPatch(){['amogos.releaseUrl','amogos.releaseTag','amogos.patchCode','amogos.patchStore','amogos.goodTag','amogos.badTag','amogos.boot'].forEach(k=>localStorage.removeItem(k));await patchClear()}
-function showUpdateNotice(){ // small card in the top right corner
+/* doUpdate runs a whole update: download, save, then restart after a short countdown.
+   say(text) writes the status line, bar(f) moves the progress bar (null hides it), cancelBtn stops the restart.
+   Returns true when the restart was scheduled, false when something failed (the reason is shown with say). */
+async function doUpdate(say,bar,cancelBtn,secs){
+ const t0=Date.now();bar(0);
+ try{
+  await installUpdate((got,total)=>{const f=total?Math.min(1,got/total):0,el=(Date.now()-t0)/1000;bar(f);say('Downloading AmogOs '+upd.tag+'… '+Math.round(f*100)+'%'+(f>.02?' ('+eta(el/f-el)+' left)':''))});
+  bar(1);
+ }catch(e){
+  bar(null);
+  say(/^stale:/.test(e.message)?'This release is named '+upd.tag+' but the file inside it says version '+e.message.slice(6)+', which is not newer than yours ('+OS_VERSION+'). The version number inside the file has to match the release.'
+   :e.message==='storage'?'There is not enough free space in this browser to save the update. Free some space and try again.'
+   :'The download failed. Try again in a minute.');
+  return false;
+ }
+ let n=secs||3,stop=false;
+ if(cancelBtn){cancelBtn.hidden=false;cancelBtn.onclick=()=>{stop=true;cancelBtn.hidden=true;say('The update is installed. It will finish the next time you start AmogOs.')}}
+ await new Promise(done=>{
+  const tk=()=>{
+   if(stop)return done();
+   if(n<=0){say('Restarting…');persist();setTimeout(restartOS,300);return done()} // save accounts and files first, then restart into the new version
+   say('Update installed. Restarting in '+n+' second'+(n===1?'':'s')+'…');n--;setTimeout(tk,1000);
+  };
+  tk();
+ });
+ return true;
+}
+function showUpdateNotice(auto){ // small card in the top right corner. "Update now" downloads, installs and restarts, no extra steps.
  if(!upd||$('#unote')||sessionStorage.getItem('amogos.skip')===upd.tag||localStorage.getItem('amogos.releaseTag')===upd.tag)return;
  const n=document.createElement('div');n.id='unote';n.className='unote';
- n.innerHTML='<b>Software update available</b><div style="color:var(--dim);margin:4px 0 10px">AmogOs '+esc(upd.tag)+' is ready. You are on '+esc(OS_VERSION)+'.</div><div style="display:flex;gap:8px"><button class="pri" data-a="go">Update now</button><button data-a="x">Later</button></div>';
- n.onclick=e=>{const a=e.target.dataset.a;if(!a)return;n.remove();if(a==='x')sessionStorage.setItem('amogos.skip',upd.tag);else openApp('Settings','Update')};
+ n.innerHTML='<b>Software update available</b><div class="us" style="color:var(--dim);margin:4px 0 10px">AmogOs '+esc(upd.tag)+' is ready. You are on '+esc(OS_VERSION)+'.</div><div class="uprog" hidden><i></i></div><div class="ub" style="display:flex;gap:8px"><button class="pri" data-a="go">Update now</button><button data-a="x">Later</button></div>';
+ const go=async()=>{
+  const st=$('.us',n),bw=$('.uprog',n),bi=$('i',bw),row=$('.ub',n);
+  row.innerHTML='<button data-a="k" hidden>Cancel restart</button><button data-a="c">Close</button>';
+  await doUpdate(t=>{st.textContent=t},f=>{bw.hidden=f==null;if(f!=null)bi.style.width=Math.round(f*100)+'%'},$('[data-a=k]',row),auto?10:3); // automatic installs wait 10 seconds before restarting, so you can cancel
+ };
+ n.onclick=e=>{const a=e.target.dataset.a;if(a==='go')go();else if(a==='x'){n.remove();sessionStorage.setItem('amogos.skip',upd.tag)}else if(a==='c')n.remove()};
  document.body.appendChild(n);
+ if(auto)go();
 }
 function bindUpdate(pg){ // wires up the buttons on Settings > Update
  const us=$('#us',pg),uc=$('#uc',pg),ui=$('#ui',pg),uk=$('#uk',pg),ubw=$('#ubw',pg),ub=$('#ub',pg),waiting=localStorage.getItem('amogos.releaseTag');
@@ -1660,7 +1693,7 @@ function settingsApp(b,tab){
   Dock:()=>`<h2 style="margin-top:0">Dock</h2><div class="card">${sc('dock','Position on screen',[['bottom','Bottom'],['top','Top'],['left','Left'],['right','Right']])}${sc('dockSize','Icon size',[['s','Small'],['m','Medium'],['l','Large']])}${sc('align','Alignment',[['center','Center'],['start','Start']])}${tg('autohide','Automatically hide the dock','Move the pointer to the screen edge to show it')}${tg('showStart','Show the Start button')}${tg('clock','Show date and time')}</div><h3 style="margin:18px 0 6px">Topbar</h3><div class="card">${tg('topbar','Show the topbar','A menu bar across the top of the screen, like on a Mac. It stays above the dock, even when the dock is at the top.')}${sc('clockAt','Date and time go in',[['topbar','Topbar'],['dock','Dock']],0,'Used while the topbar is on. With it off, the clock stays in the dock.')}</div>`,
   Accessibility:()=>`<h2 style="margin-top:0">Accessibility</h2><div class="card">${sc('textSize','Text size',[[13,'Small'],[14,'Default'],[16,'Large'],[18,'Larger'],[20,'Largest']],1)}${tg('hc','High contrast')}${tg('rm','Reduce motion','Turns off animations and transitions')}${tg('bigcur','Large mouse pointer')}${sc('filter','Color filter',[['none','None'],['gray','Grayscale'],['invert','Inverted'],['vivid','Vivid colors']])}</div>`,
   Notifications:()=>`<h2 style="margin-top:0">Notifications</h2><div class="card">${tg('notif','Show notifications','Messages like “Saved” or “Moved to Trash”. Warnings always show.')}${sc('dur','Show for',[[2,'2 seconds'],[3,'3 seconds'],[5,'5 seconds'],[8,'8 seconds']],1)}</div>`,
-  Update:()=>`<h2 style="margin-top:0">Software update</h2><div class="card"><b>AmogOs ${OS_VERSION}</b><div id="us" style="color:var(--dim);margin:6px 0 12px">Checking…</div><div class="uprog" id="ubw" hidden><i id="ub"></i></div><button class="pri" id="uc">Check for updates</button> <button id="ui" hidden>Install update</button> <button id="uk" hidden>Cancel restart</button></div><div class="card">${tg('autoUpdate','Check for updates when AmogOs starts','A notification appears when a new version is out')}</div><div class="card">${IN_LAUNCHER?'<b>Reinstall AmogOs</b><p style="color:var(--dim)">If something looks wrong, download a fresh copy of AmogOs. Your accounts and files are kept.</p><button id="ur">Reinstall AmogOs</button>':'<b>Built-in version</b><p style="color:var(--dim)">If an update ever causes trouble, you can remove it and go back to the version this file came with.</p><button id="ur">Go back to the built-in version</button>'}</div>`,
+  Update:()=>`<h2 style="margin-top:0">Software update</h2><div class="card"><b>AmogOs ${OS_VERSION}</b><div id="us" style="color:var(--dim);margin:6px 0 12px">Checking…</div><div class="uprog" id="ubw" hidden><i id="ub"></i></div><button class="pri" id="uc">Check for updates</button> <button class="pri" id="ui" hidden>Update now</button> <button id="uk" hidden>Cancel restart</button></div><div class="card">${tg('autoUpdate','Check for updates when AmogOs starts','A notification appears when a new version is out')}${tg('autoInstall','Install updates automatically','When a new version is found, it is downloaded and installed, then AmogOs restarts after a 10 second countdown you can cancel. Needs the setting above.')}</div><div class="card">${IN_LAUNCHER?'<b>Reinstall AmogOs</b><p style="color:var(--dim)">If something looks wrong, download a fresh copy of AmogOs. Your accounts and files are kept.</p><button id="ur">Reinstall AmogOs</button>':'<b>Built-in version</b><p style="color:var(--dim)">If an update ever causes trouble, you can remove it and go back to the version this file came with.</p><button id="ur">Go back to the built-in version</button>'}</div>`,
   About:()=>`<h2 style="margin-top:0">About</h2><div class="card"><b>${esc(S().device)}</b><br><span style="color:var(--dim)">AmogOs ${OS_VERSION}<br>Storage: ${gbName(U().gb)}<br>Signed in as ${esc(me)}</span></div>`,
   Storage:()=>{const u=U(),max=u.gb*1e9,f=Object.entries(u.fs),sz=pre=>f.filter(([k])=>k.startsWith(pre+'/')).reduce((n,[,r])=>n+(r.d?r.d.length:50),0)*SCALE,doc=sz('/Documents'),pic=sz('/Pictures'),us=used(u),oth=Math.max(0,us-SYS-doc-pic);
    return`<h2 style="margin-top:0">Storage</h2><div class="card"><div style="font-size:22px">${fmt(us)} <span style="color:var(--dim);font-size:14px">used of ${gbName(u.gb)}</span></div><div class="bar" style="height:12px"><i style="width:${Math.min(100,us/max*100)}%"></i></div>${row('#8b5cf6','System',SYS,max)}${row('#4cc2ff','Documents',doc,max)}${row('#e43ba6','Pictures',pic,max)}${row('#ffd600','Other files',oth,max)}<div style="color:var(--dim)">${fmt(Math.max(0,max-us))} free</div></div>`},
