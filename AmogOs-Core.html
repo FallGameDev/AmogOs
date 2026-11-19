@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>AmogOs</title>
-<meta name="amogos-version" content="1.3.0">
+<meta name="amogos-version" content="1.4.0">
 <script>
 /* ===== Patch loader =====
    The version of this file is the meta tag above (the ONLY place to change it for a release).
@@ -319,8 +319,17 @@ const $=(s,e=document)=>e.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const enc=new TextEncoder(),dec=new TextDecoder();
 /* ----- Settings store: per-user, with defaults ----- */
-const OS_VERSION=(document.querySelector('meta[name=amogos-version]')||{}).content||'1.3.0',OS_REPO='FallGameDev/OS.Lite'; // the version is the <meta name=amogos-version> tag at the top of this file
+const OS_VERSION=(document.querySelector('meta[name=amogos-version]')||{}).content||'1.4.0',OS_REPO='FallGameDev/OS.Lite'; // the version is the <meta name=amogos-version> tag at the top of this file
 const STORE_RAW='https://raw.githubusercontent.com/FallGameDev/OS.Lite/main/apps/'; // app packages live in the apps folder of OS.Lite
+/* ----- AmogOs Cloud settings -----
+   Fill these in once (steps are in AmogOs-Cloud-Setup.html).
+   The anon key is safe to put here: it is public on purpose, and Row Level Security keeps each person's data private. */
+const CLOUD={
+ url:'https://mcqpodbwtwhjhkycwhzf.supabase.co', // your Supabase project address
+ key:'sb_publishable_a9xAXPeYwoNgNwRaCkx8RQ_0RrQ3gtV',             // Supabase anon (publishable) key. Never put the service key here.
+ mail:'https://script.google.com/macros/s/AKfycbwHg3NhvYz3FgVLpyI0d_TKT2e7dpkq5nqbWWOCmaQLaGZ8mX-0c7umcrbXBgHQNFkP/exec',      // Google Apps Script web app address (sends the code and creates accounts)
+ maxFile:10*1024*1024                            // biggest file The Cloud accepts (10 MB)
+};
 const DEF={device:'AMOG-PC',h24:false,secs:false,dfmt:'short',confirmDel:false,maxWin:false,brightness:100,scale:100,night:false,nightAmt:30,sounds:true,volume:60,dock:'bottom',dockSize:'m',align:'center',autohide:false,clock:true,showStart:true,textSize:14,hc:false,rm:false,bigcur:false,filter:'none',notif:true,dur:3,accent:'#4cc2ff',engine:'google',edgeUrl:'https://mcqpodbwtwhjhkycwhzf.supabase.co/functions/v1/fetch-page',edgeKey:'',proxy:'',storeSrc:'',startApps:true,autoUpdate:true,topbar:false,clockAt:'topbar',autoInstall:false};
 const S=()=>Object.assign({},DEF,me&&U()?U().set:{});
 const DS={s:22,m:26,l:32},dsz=()=>DS[S().dockSize]||26;
@@ -456,13 +465,9 @@ addEventListener('keydown',e=>{if(e.key==='Escape')cm.style.display='none'});
 addEventListener('blur',()=>cm.style.display='none');
 document.addEventListener('contextmenu',e=>{if(!e.target.closest('input,textarea,iframe'))e.preventDefault()}); // no browser menu on the OS itself
 
-/* ---- crypto: password hash + AES-GCM sealed backups ---- */
+/* ---- crypto: password hash (used by the lock screen) ---- */
 const b64=u=>{let s='';new Uint8Array(u).forEach(c=>s+=String.fromCharCode(c));return btoa(s)};
-const ub=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
 async function sha(t){return b64(await crypto.subtle.digest('SHA-256',enc.encode(t)))}
-async function dkey(pw,salt){const m=await crypto.subtle.importKey('raw',enc.encode(pw),'PBKDF2',false,['deriveKey']);return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:150000,hash:'SHA-256'},m,{name:'AES-GCM',length:256},false,['encrypt','decrypt'])}
-async function seal(obj,pw){const salt=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(12));const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},await dkey(pw,salt),enc.encode(JSON.stringify(obj)));return JSON.stringify({amogos:1,salt:b64(salt),iv:b64(iv),data:b64(ct)})}
-async function unseal(txt,pw){const j=JSON.parse(txt);const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:ub(j.iv)},await dkey(pw,ub(j.salt)),ub(j.data));return JSON.parse(dec.decode(pt))}
 
 /* ================= Storage (localStorage) ================= */
 let DB={users:{}};
@@ -472,7 +477,7 @@ async function loadDB(){
  try{const db=await idb,v=await new Promise(ok=>{const q=db.transaction('kv').objectStore('kv').get('db');q.onsuccess=()=>ok(q.result);q.onerror=()=>ok(null)});if(v&&v.users)DB=v}catch(e){}
  if(!Object.keys(DB.users).length){try{const o=JSON.parse(localStorage.getItem('amogos'));if(o&&o.users)DB=o}catch(e){}}
 }
-let pt;function persist(){clearTimeout(pt);pt=setTimeout(async()=>{try{const db=await idb;db.transaction('kv','readwrite').objectStore('kv').put(DB,'db')}catch(e){try{localStorage.setItem('amogos',JSON.stringify(DB))}catch(e2){toast('The drive couldn’t be written to.')}}},250)}
+let pt;function persist(){clearTimeout(pt);pt=setTimeout(async()=>{cloudQueue();try{const db=await idb;db.transaction('kv','readwrite').objectStore('kv').put(DB,'db')}catch(e){try{localStorage.setItem('amogos',JSON.stringify(DB))}catch(e2){toast('The drive couldn’t be written to.')}}},250)}
 addEventListener('pagehide',()=>{clearTimeout(pt);idb.then(db=>db.transaction('kv','readwrite').objectStore('kv').put(DB,'db')).catch(()=>{})});
 let me=null;const U=()=>DB.users[me];
 const fmt=b=>b>=1e12?(b/1e12).toFixed(2)+' TB':b>=1e9?(b/1e9).toFixed(1)+' GB':(b/1e6).toFixed(0)+' MB';
@@ -499,6 +504,326 @@ const starterFS=()=>({'/Desktop':{t:'d'},'/Documents':{t:'d'},'/Pictures':{t:'d'
  '/Documents/Welcome.txt':{t:'f',m:'text/plain',d:toData('Welcome to AmogOs!\n\nRight-click anywhere to see options. Double-click icons to open them.')}});
 function download(name,url){const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove()}
 
+/* ================= AmogOs Cloud =================
+   Accounts, The Cloud folder and backups all live on Supabase. We talk to it with plain fetch calls (no library).
+   Sending the email code and creating the account is done by a Google Apps Script (see AmogOs-Cloud-Setup.html). */
+const CLOUD_DIR='/The Cloud';                       // the synced folder in the file manager
+const CSES={at:'',exp:0,rt:'',uid:'',pw:''};       // current session: access token, when it ends, refresh token, user id. Memory only.
+const CF={sig:new WeakMap(),busy:false,again:false,state:'idle',timer:0,poll:0,nagged:0,big:{}}; // file sync state
+const cloudReady=()=>!/^PASTE_/.test(CLOUD.key)&&!/^PASTE_/.test(CLOUD.mail);
+const isCloudPath=p=>p===CLOUD_DIR||p.indexOf(CLOUD_DIR+'/')===0;
+function ensureCloudRoot(){const u=U();if(u&&u.cloud&&!u.fs[CLOUD_DIR])u.fs[CLOUD_DIR]={t:'d'}}
+const cloudStatus=()=>({sync:'Syncing…',idle:'Up to date',offline:'Offline, will retry',auth:'Sign in again to sync',setup:'Cloud database not set up'}[CF.state]||'Up to date');
+
+/* ---------- sign in and tokens ---------- */
+async function authPost(path,body){ // calls the Supabase login service
+ const r=await fetch(CLOUD.url+path,{method:'POST',headers:{apikey:CLOUD.key,'Content-Type':'application/json'},body:JSON.stringify(body)});
+ let j={};try{j=await r.json()}catch(e){}
+ return{ok:r.ok,status:r.status,j};
+}
+function takeSession(j){ // remember a fresh session
+ CSES.at=j.access_token;CSES.exp=Date.now()+Math.max(30,(j.expires_in||3600)-60)*1000;CSES.rt=j.refresh_token;CSES.uid=j.user.id;CSES.pw='';
+ const u=me&&U();if(u&&u.cloud){u.cloud.rt=CSES.rt;u.cloud.uid=CSES.uid;persist()} // refresh tokens rotate, so save the new one
+}
+async function cloudSignIn(email,pw){ // throws 'bad' for a wrong email or password, 'net' for anything else
+ let r;try{r=await authPost('/auth/v1/token?grant_type=password',{email,password:pw})}catch(e){throw new Error('net')}
+ if(!r.ok)throw new Error(r.status===400||r.status===401?'bad':'net');
+ takeSession(r.j);
+}
+let tokenJob=null;
+async function cloudToken(){ // makes sure we hold a valid access token for the current user
+ const c=U()&&U().cloud;if(!c)throw new Error('auth');
+ if(CSES.at&&CSES.uid===c.uid&&Date.now()<CSES.exp)return;
+ if(!tokenJob)tokenJob=(async()=>{
+  await 0; // lets tokenJob be set before anything below can finish
+  try{
+   const rt=(CSES.uid===c.uid&&CSES.rt)||c.rt;
+   let r=rt?await authPost('/auth/v1/token?grant_type=refresh_token',{refresh_token:rt}).catch(()=>null):null;
+   if((!r||!r.ok)&&CSES.pw)r=await authPost('/auth/v1/token?grant_type=password',{email:c.email,password:CSES.pw}).catch(()=>null);
+   if(!r||!r.ok)throw new Error(r&&(r.status===400||r.status===401)?'auth':'net');
+   takeSession(r.j);
+  }finally{tokenJob=null}
+ })();
+ return tokenJob;
+}
+async function sb(path,o={}){ // one call to the Supabase database (REST). o = {method, body, prefer}
+ await cloudToken();
+ const r=await fetch(CLOUD.url+'/rest/v1/'+path,{method:o.method||'GET',headers:Object.assign({apikey:CLOUD.key,Authorization:'Bearer '+CSES.at,'Content-Type':'application/json'},o.prefer?{Prefer:o.prefer}:{}),body:o.body==null?undefined:JSON.stringify(o.body)});
+ if(!r.ok){const e=new Error('rest '+r.status);e.status=r.status;e.body=await r.text().catch(()=>'');if(r.status===401)CSES.exp=0;throw e}
+ return r.status===204?null:r.json().catch(()=>null);
+}
+async function cloudSetPassword(pw){ // changes the account password on the server
+ await cloudToken();
+ const r=await fetch(CLOUD.url+'/auth/v1/user',{method:'PUT',headers:{apikey:CLOUD.key,Authorization:'Bearer '+CSES.at,'Content-Type':'application/json'},body:JSON.stringify({password:pw})});
+ if(!r.ok)throw new Error('pw');
+}
+async function mailCall(body){ // talks to the Google Apps Script. Sent as plain text on purpose: no custom headers means no CORS preflight, which Apps Script can't answer.
+ const r=await fetch(CLOUD.mail,{method:'POST',body:JSON.stringify(body)});
+ return r.json();
+}
+const mailMsg=e=>({
+ email_in_use:'That email is already being used. Try signing in instead.',
+ too_soon:'A code was just sent. Wait a minute, then try again.',
+ bad_email:'Enter a valid email address.',
+ weak_password:'Choose a password with at least 8 characters.',
+ bad_code:'That code isn’t right. Check it and try again.',
+ expired:'That code expired. Go back and ask for a new one.',
+ too_many:'Too many wrong tries. Ask for a new code.'
+}[e]||'Something went wrong. Try again in a minute.');
+const cloudErr=e=>e&&e.message==='auth'?'Your cloud session ended. Sign out and sign in again.':e&&(e.status===404||/PGRST20/.test(e.body||''))?'The cloud database isn’t set up yet. See AmogOs-Cloud-Setup.html.':'Couldn’t reach the cloud. Check your connection and try again.';
+
+/* ---------- sign in / create account box (used by setup and by Settings > Backup) ----------
+   onDone({email,pw}) runs once the person is signed in. onBack (optional) adds a Back button. */
+function cloudAuth(el,onDone,onBack){
+ const st={mode:'in',email:'',pw:''};          // mode: 'in' = sign in, 'new' = create account, 'code' = type the emailed code
+ const full='style="width:100%;margin:6px 0"';
+ const $$=s=>$(s,el);
+ const msg=(t,ok)=>{const m=$$('#cm');if(m){m.textContent=t||'';m.style.color=ok?'var(--dim)':'#f87171'}};
+ const lock=on=>el.querySelectorAll('button,input').forEach(x=>x.disabled=on);
+ const back=onBack?'<button id="cb">Back</button> ':'';
+ const emailOk=s=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+ const bind=(id,f)=>{const b=$$(id);if(b)b.onclick=f};
+ const enter=f=>el.querySelectorAll('input').forEach(i=>i.onkeydown=e=>{if(e.key==='Enter')f()});
+ const draw=()=>{
+  if(!cloudReady()){
+   el.innerHTML=`<p style="color:#f87171">Cloud sign in isn’t set up yet. Add your Supabase key and Apps Script address in the AmogOs Cloud settings at the top of the OS code (see AmogOs-Cloud-Setup.html).</p><div class="nav" style="margin-top:10px"><span>${back}</span></div>`;
+   return bind('#cb',onBack);
+  }
+  if(st.mode==='in'){
+   el.innerHTML=`<p style="color:var(--dim);margin-top:0">Use the email and password you made for AmogOs.</p>
+    <input id="ce" type="email" placeholder="Email" autocomplete="username" ${full} value="${esc(st.email)}">
+    <input id="cp" type="password" placeholder="Password" autocomplete="current-password" ${full}>
+    <p id="cm" style="min-height:20px;margin:4px 0"></p>
+    <div class="nav" style="margin-top:10px"><span>${back}<button id="cn">I don’t have an account</button></span><button class="pri" id="cs">Sign in</button></div>`;
+   const go=async()=>{
+    const email=$$('#ce').value.trim().toLowerCase(),pw=$$('#cp').value;
+    if(!emailOk(email))return msg('Enter a valid email address.');
+    if(!pw)return msg('Enter your password.');
+    lock(true);msg('Signing in…',true);
+    try{await cloudSignIn(email,pw)}catch(e){lock(false);return msg(e.message==='bad'?'That email or password isn’t right.':'Couldn’t reach the server. Check your connection and try again.')}
+    onDone({email,pw});
+   };
+   bind('#cs',go);bind('#cb',onBack);enter(go);
+   bind('#cn',()=>{st.email=$$('#ce').value.trim();st.mode='new';draw()});
+  }else if(st.mode==='new'){
+   el.innerHTML=`<p style="color:var(--dim);margin-top:0">Make an account with your email and a password. We’ll email you a code to check it’s really you.</p>
+    <input id="ce" type="email" placeholder="Email" autocomplete="username" ${full} value="${esc(st.email)}">
+    <input id="cp" type="password" placeholder="Password (8 or more characters)" autocomplete="new-password" ${full}>
+    <input id="cp2" type="password" placeholder="Re-enter password" autocomplete="new-password" ${full}>
+    <p id="cm" style="min-height:20px;margin:4px 0"></p>
+    <div class="nav" style="margin-top:10px"><span><button id="cl">Back to sign in</button></span><button class="pri" id="cs">Send me a code</button></div>`;
+   const go=async()=>{
+    const email=$$('#ce').value.trim().toLowerCase(),pw=$$('#cp').value;
+    if(!emailOk(email))return msg('Enter a valid email address.');
+    if(pw.length<8)return msg('Choose a password with at least 8 characters.');
+    if(pw!==$$('#cp2').value)return msg('The passwords don’t match.');
+    lock(true);msg('Checking your email and sending the code…',true);
+    try{
+     const r=await mailCall({action:'send',email});
+     if(!r.ok){lock(false);return msg(mailMsg(r.error))}
+     st.email=email;st.pw=pw;st.mode='code';draw();
+    }catch(e){lock(false);msg('Couldn’t reach the server. Check your connection and try again.')}
+   };
+   bind('#cs',go);enter(go);
+   bind('#cl',()=>{st.email=$$('#ce').value.trim();st.mode='in';draw()});
+  }else{
+   el.innerHTML=`<p style="color:var(--dim);margin-top:0">We sent a 6 character code to <b>${esc(st.email)}</b>. It can take a minute. Check your spam folder too.</p>
+    <input id="cc" maxlength="6" placeholder="A8EM21" autocomplete="one-time-code" style="width:100%;margin:6px 0;font-size:26px;letter-spacing:8px;text-align:center">
+    <p id="cm" style="min-height:20px;margin:4px 0"></p>
+    <div class="nav" style="margin-top:10px"><span><button id="cl">Back</button> <button id="cr">Send a new code</button></span><button class="pri" id="cs">Verify</button></div>`;
+   const cc=$$('#cc');cc.oninput=()=>{cc.value=cc.value.toUpperCase().replace(/[^A-Z0-9]/g,'')};cc.focus();
+   const go=async()=>{
+    const code=cc.value.trim().toUpperCase();
+    if(code.length!==6)return msg('Enter the 6 character code.');
+    lock(true);msg('Checking the code…',true);
+    let r;try{r=await mailCall({action:'verify',email:st.email,code,password:st.pw})}catch(e){lock(false);return msg('Couldn’t reach the server. Check your connection and try again.')}
+    if(!r.ok){lock(false);return msg(mailMsg(r.error))}
+    msg('Account created. Signing you in…',true);
+    try{await cloudSignIn(st.email,st.pw)}catch(e){st.mode='in';draw();return msg('Your account was created. Sign in to continue.',true)}
+    onDone({email:st.email,pw:st.pw});
+   };
+   bind('#cs',go);enter(go);
+   bind('#cl',()=>{st.mode='new';draw()});
+   bind('#cr',async()=>{
+    lock(true);msg('Sending a new code…',true);
+    try{const r=await mailCall({action:'send',email:st.email});lock(false);msg(r.ok?'A new code is on its way.':mailMsg(r.error),r.ok)}catch(e){lock(false);msg('Couldn’t reach the server. Check your connection and try again.')}
+   });
+  }
+ };
+ draw();
+}
+
+/* ---------- The Cloud folder: file sync ----------
+   Everything under /The Cloud in the file system is mirrored to the cloud_files table.
+   We never hook individual edits. Instead every sync compares three things:
+     here (the files now), then (what we last synced, saved in u.cloud.map) and the server.
+   Changed here -> upload. Changed on the server -> download. Gone on one side since last time -> gone on the other. */
+function fsig(r){ // short fingerprint of a file, so we can spot changes without comparing whole files
+ const n=r.t==='d'?0:(r.d||'').length,hit=CF.sig.get(r);
+ if(hit&&hit.n===n)return hit.s;
+ let s='d';
+ if(r.t!=='d'){const t=(r.m||'')+'|'+(r.d||'');let h=2166136261;for(let i=0;i<t.length;i++){h^=t.charCodeAt(i);h=Math.imul(h,16777619)}s='f'+(h>>>0).toString(36)+'-'+t.length.toString(36)}
+ CF.sig.set(r,{n,s});return s;
+}
+function cloudLocal(){ // every file and folder inside The Cloud (not the folder itself) with its fingerprint
+ const o={},fs=U().fs;
+ for(const p in fs){
+  if(p===CLOUD_DIR||!isCloudPath(p))continue;
+  const r=fs[p];
+  if(r.t==='f'&&(r.d||'').length>CLOUD.maxFile*1.37){ // too big: stays on this PC only
+   if(!CF.big[p]){CF.big[p]=1;toast('“'+base(p)+'” is too big for The Cloud (the limit is '+Math.round(CLOUD.maxFile/1048576)+' MB), so it stays on this PC.')}
+   continue;
+  }
+  o[p]=fsig(r);
+ }
+ return o;
+}
+function cloudDirty(){ // is anything in The Cloud different from the last sync?
+ const c=U()&&U().cloud;if(!c)return false;
+ const m=c.map||{},l=cloudLocal();
+ for(const p in l)if(m[p]!==l[p])return true;
+ for(const p in m)if(!(p in l))return true;
+ return false;
+}
+function cloudQueue(){ // runs after every save: if something in The Cloud changed, upload it soon
+ if(!me||!U()||!U().cloud||!cloudReady())return;
+ clearTimeout(CF.timer);
+ if(cloudDirty())CF.timer=setTimeout(()=>cloudSync(),1200);
+}
+const inList=a=>'('+a.map(p=>'"'+p.replace(/\\/g,'\\\\').replace(/"/g,'\\"')+'"').join(',')+')'; // paths as a database filter list
+async function remoteList(){ // every file on the server (no file data, just names and fingerprints)
+ const out=[];
+ for(let off=0;;off+=1000){
+  const page=await sb('cloud_files?select=path,type,mime,sig&order=path&limit=1000&offset='+off);
+  out.push(...page);if(page.length<1000)break;
+ }
+ return out;
+}
+async function cloudSync(manual){
+ const u=U();if(!me||!u||!u.cloud||!cloudReady())return;
+ if(CF.busy){CF.again=true;return}
+ CF.busy=true;const was=CF.state;CF.state='sync';let changed=false,round=0;
+ const alive=()=>{if(U()!==u)throw new Error('gone')}; // stop if somebody signed out while we waited
+ try{
+  do{
+   CF.again=false;round++;
+   const c=u.cloud;c.map=c.map||{};const map=c.map;
+   const remote={};(await remoteList()).forEach(r=>remote[r.path]=r);alive();
+   const loc=cloudLocal(),push=[],del=[],pull=[],drop=[];
+   /* sort every path into: upload, download, delete here, delete on the server */
+   for(const p in loc){
+    const ls=loc[p],ms=map[p],rm=remote[p];
+    if(!rm){ if(ms===undefined||ls!==ms)push.push(p); else drop.push(p) } // missing on the server: new here, or deleted elsewhere
+    else if(rm.sig!==ls){ if(ls!==ms)push.push(p); else pull.push(p) }   // different: whoever changed it since last time wins (here wins a tie)
+   }
+   for(const p in remote){if(p in loc)continue;if(map[p]!==undefined)del.push(p);else pull.push(p)} // not here: deleted here, or new on the server
+   /* 1) deleted on another device -> remove here (deepest first; keep a folder that still holds a changed file) */
+   drop.sort((a,b)=>b.length-a.length).forEach(p=>{
+    if(u.fs[p]&&u.fs[p].t==='d'&&Object.keys(u.fs).some(k=>k.indexOf(p+'/')===0)){push.push(p);return}
+    delete u.fs[p];delete map[p];changed=true;
+   });
+   /* 2) deleted here -> remove on the server */
+   for(let i=0;i<del.length;i+=25){
+    const part=del.slice(i,i+25);
+    await sb('cloud_files?path=in.'+encodeURIComponent(inList(part)),{method:'DELETE',prefer:'return=minimal'});alive();
+    part.forEach(p=>delete map[p]);
+   }
+   /* 3) new or changed here -> upload (folders in one go, files one at a time so each request stays small) */
+   const rowOf=p=>{const r=u.fs[p];return r&&{user_id:c.uid,path:p,type:r.t,mime:r.t==='f'?(r.m||'application/octet-stream'):null,data:r.t==='f'?(r.d||''):null,sig:fsig(r),updated_at:new Date().toISOString()}};
+   const up=async rows=>{await sb('cloud_files?on_conflict=user_id,path',{method:'POST',prefer:'resolution=merge-duplicates,return=minimal',body:rows});alive();rows.forEach(r=>map[r.path]=r.sig)};
+   const folders=push.filter(p=>u.fs[p]&&u.fs[p].t==='d').map(rowOf);
+   for(let i=0;i<folders.length;i+=100)await up(folders.slice(i,i+100));
+   for(const p of push){if(u.fs[p]&&u.fs[p].t==='f')await up([rowOf(p)])}
+   /* 4) new or changed on the server -> download */
+   for(const p of pull){
+    const rows=await sb('cloud_files?select=type,mime,data&path=eq.'+encodeURIComponent(p));alive();
+    const d=rows&&rows[0];if(!d)continue;
+    const cur=u.fs[p];if(cur&&fsig(cur)!==loc[p])continue; // it changed here while we downloaded: the next round uploads it
+    for(let q=parent(p);q!==CLOUD_DIR&&q!=='/'&&!u.fs[q];q=parent(q))u.fs[q]={t:'d'};
+    const rec=d.type==='d'?{t:'d'}:{t:'f',m:d.mime||'application/octet-stream',d:d.data||''};
+    u.fs[p]=rec;map[p]=fsig(rec);changed=true;
+   }
+   /* 5) files that already matched count as synced */
+   for(const p in loc)if(remote[p]&&remote[p].sig===loc[p])map[p]=loc[p];
+   persist();
+  }while(CF.again&&round<3);
+  CF.state='idle';
+ }catch(e){
+  if(e.message!=='gone'){
+   CF.state=e.message==='auth'||e.status===401?'auth':(e.status===404||/PGRST20/.test(e.body||''))?'setup':'offline';
+   if(CF.state==='auth'&&!CF.nagged){CF.nagged=1;toast('Your cloud session ended. Sign out and sign in again to keep syncing.')}
+   if(CF.state==='setup'&&!CF.nagged){CF.nagged=1;toast('The cloud database isn’t set up yet. See AmogOs-Cloud-Setup.html.')}
+  }
+ }finally{
+  CF.busy=false;
+  if(me&&U()&&U()!==u)setTimeout(()=>cloudSync(),300);                  // a different person signed in while we were busy
+  else if(me&&U()===u&&(changed||manual||CF.state!==was))refreshAll();  // redraw windows so new files and the status show up
+ }
+}
+function cloudStart(){ // called by boot() once the desktop is up
+ cloudStop();
+ const u=U();if(!u||!u.cloud||!cloudReady())return;
+ ensureCloudRoot();CF.state='sync';
+ CF.poll=setInterval(()=>{if(!document.hidden)cloudSync()},20000); // look for changes made on other devices
+ cloudSync();
+}
+function cloudStop(all){ // all=true also forgets the session (sign out)
+ clearInterval(CF.poll);clearTimeout(CF.timer);CF.state='idle';CF.nagged=0;
+ if(all){CSES.at='';CSES.exp=0;CSES.rt='';CSES.uid='';CSES.pw=''}
+}
+addEventListener('online',()=>cloudSync());
+addEventListener('focus',()=>cloudSync());
+
+/* ---------- backups: history, bookmarks, account settings and all settings (NO files) ---------- */
+function backupPayload(){
+ const u=U(),b=u.browser||{};
+ return{v:1,saved:new Date().toISOString(),set:u.set||{},wall:u.wall||0,gb:u.gb,
+  pins:u.pins?u.pins.filter(x=>!/^amo:/.test(x)):null, // pins that point at installed apps are skipped because apps are files
+  browser:{history:(b.history||[]).slice(0,500),bookmarks:b.bookmarks||[]}};
+}
+async function cloudBackupSave(){
+ await cloudToken();
+ await sb('cloud_backups?on_conflict=user_id',{method:'POST',prefer:'resolution=merge-duplicates,return=minimal',body:{user_id:U().cloud.uid,data:backupPayload(),updated_at:new Date().toISOString()}});
+}
+async function cloudBackupLoad(){const r=await sb('cloud_backups?select=data,updated_at&limit=1');return r&&r[0]||null}
+function mergeBackup(d){ // loading a backup ADDS it to this PC: nothing is wiped
+ const u=U(),b=BR(),okUrl=x=>x&&typeof x.url==='string'&&/^https?:\/\//i.test(x.url);
+ u.set=u.set||{};
+ for(const k in (d.set||{}))if(k in DEF&&typeof d.set[k]===typeof DEF[k])u.set[k]=d.set[k]; // only known settings of the right type
+ if(typeof d.wall==='number'&&d.wall>=0&&d.wall<WALLS.length)u.wall=d.wall;
+ if(typeof d.gb==='number'&&d.gb>(u.gb||0)&&d.gb<=1024)u.gb=d.gb;
+ if(Array.isArray(d.pins)){const cur=getPins().slice();d.pins.forEach(x=>{if(typeof x==='string'&&!/^amo:/.test(x)&&!cur.includes(x))cur.push(x)});u.pins=cur}
+ const bd=d.browser||{};
+ (Array.isArray(bd.bookmarks)?bd.bookmarks:[]).filter(okUrl).forEach(x=>{if(!b.bookmarks.some(y=>y.url===x.url))b.bookmarks.push({url:x.url,title:String(x.title||'').slice(0,200)})});
+ const seen={};b.history=b.history.concat((Array.isArray(bd.history)?bd.history:[]).filter(okUrl).map(x=>({url:x.url,title:String(x.title||'').slice(0,200),t:+x.t||0})))
+  .sort((x,y)=>(y.t||0)-(x.t||0)).filter(x=>seen[x.url+'|'+x.t]?false:(seen[x.url+'|'+x.t]=1)).slice(0,500);
+ save();applySettings();applyWall();renderDesk();paintPins();
+}
+function backupHtml(){ // the Settings > Backup page
+ const c=U().cloud;
+ if(!c)return`<h2 style="margin-top:0">Backup</h2><div class="card"><b>Sign in to back up</b><p style="color:var(--dim)">Sign in with your AmogOs account to save your history, bookmarks and settings, and to get The Cloud folder for files you can open on any device.</p><div id="cauth"></div></div>`;
+ return`<h2 style="margin-top:0">Backup</h2><div class="card"><b>Cloud account</b><p style="color:var(--dim);margin:4px 0 0">${esc(c.email)}</p><p style="color:var(--dim);margin:4px 0 0">The Cloud: ${esc(cloudStatus())}</p></div>
+ <div class="card"><b>Save or load a backup</b><p style="color:var(--dim)">A backup keeps your browser history, bookmarks, account settings and all settings. It does not include files. Files in The Cloud sync by themselves. Loading a backup adds it to this PC.</p><button class="pri" id="bsave">Save backup</button> <button id="bload">Load backup</button><p id="bnote" style="color:var(--dim);min-height:20px"></p></div>`;
+}
+function backupBind(pg,again){
+ const a=$('#cauth',pg);
+ if(a)return cloudAuth(a,({email})=>{ // linking an account that was made before the cloud existed
+  U().cloud={uid:CSES.uid,email,rt:CSES.rt,map:{}};ensureCloudRoot();save();cloudStart();toast('Signed in to the cloud');refreshAll();again();
+ });
+ const note=t=>{const n=$('#bnote',pg);if(n)n.textContent=t};
+ $('#bsave',pg).onclick=async()=>{note('Saving…');try{await cloudBackupSave();note('Saved '+new Date().toLocaleString())}catch(e){note(cloudErr(e))}};
+ $('#bload',pg).onclick=async()=>{
+  note('Looking for your backup…');
+  try{
+   const d=await cloudBackupLoad();
+   if(!d)return note('No backup was found yet. Save one first.');
+   if(!await ask('Add the backup from '+new Date(d.updated_at).toLocaleString()+' to this PC?',null))return note('');
+   mergeBackup(d.data||{});note('Backup loaded.');
+  }catch(e){note(cloudErr(e))}
+ };
+}
+
+
 /* ----- Shared file actions (used by Files, the desktop, and menus) ----- */
 const views=[]; // open Files windows, so they redraw when files change
 function refreshAll(){renderDesk();renderStart();views.forEach(v=>v.b.isConnected&&v.draw())}
@@ -508,6 +833,7 @@ async function newItem(dir,kind){
  if(kind==='d'){U().fs[p]={t:'d'};save()}else put(p,{t:'f',m:'text/plain',d:toData('')});refreshAll();
 }
 async function renItem(p){
+ if(p===CLOUD_DIR)return toast('The Cloud folder can’t be renamed.');
  const n=await ask('New name',base(p));if(!n)return;const q=join(parent(p),n),fs=U().fs;if(fs[q])return toast('That name is already used');
  Object.keys(fs).forEach(k=>{if(k===p||k.startsWith(p+'/')){fs[q+k.slice(p.length)]=fs[k];delete fs[k]}});
  if(U().wallImg===p)U().wallImg=q;save();refreshAll();applyWall();
@@ -550,6 +876,7 @@ function amoRun(p){
 /* ----- Trash: deleted items wait here until restored or deleted forever ----- */
 const trashList=()=>U().trash=U().trash||[];
 function toTrash(p){
+ if(p===CLOUD_DIR)return toast('The Cloud folder can’t be moved to the Trash.');
  const fs=U().fs,items={};Object.keys(fs).forEach(k=>{if(k===p||k.startsWith(p+'/')){items[k]=fs[k];delete fs[k]}});
  trashList().push({id:Date.now()+'-'+Math.random().toString(36).slice(2),name:base(p),from:p,items});
  save();refreshAll();applyWall();sfx('trash');toast('Moved to Trash');
@@ -678,14 +1005,14 @@ function openWin(app,title,w,h,fn){
 /* --- Files --- */
 function filesApp(b,start){
  let cwd=start||'/Documents',sel=null;
- const places=[['monitor','Desktop','/Desktop'],['doc','Documents','/Documents'],['image','Pictures','/Pictures'],['down','Downloads','/Downloads'],['app','Applications','/Applications'],['drive','This PC','/']];
+ const places=[['monitor','Desktop','/Desktop'],['doc','Documents','/Documents'],['image','Pictures','/Pictures'],['down','Downloads','/Downloads'],['app','Applications','/Applications'],...(U().cloud?[['cloud','The Cloud',CLOUD_DIR]]:[]),['drive','This PC','/']];
  const openP=p=>{const r=U().fs[p];if(r.t==='d'){cwd=p;sel=null;draw()}else openFile(p)};
  const draw=()=>{
   const fs=U().fs,items=Object.keys(fs).filter(p=>parent(p)===cwd).sort((a,c)=>(fs[c].t==='d')-(fs[a].t==='d')||a.localeCompare(c));
-  b.innerHTML=`<div class="fill"><div class="tl"><button data-a="up">Up</button><button data-a="nd">New folder</button><button data-a="nt">New file</button><button data-a="upl">Upload</button><span style="margin-left:auto;color:var(--dim)">${esc(cwd==='/'?'This PC':cwd.slice(1).replace(/\//g,' › '))}</span><input type="file" hidden></div>
+  b.innerHTML=`<div class="fill"><div class="tl"><button data-a="up">Up</button><button data-a="nd">New folder</button><button data-a="nt">New file</button><button data-a="upl">Upload</button>${U().cloud&&isCloudPath(cwd)?'<button data-a="sync">Sync</button>':''}<span style="margin-left:auto;color:var(--dim)">${esc(cwd==='/'?'This PC':cwd.slice(1).replace(/\//g,' › '))}</span><input type="file" hidden></div>
   <div style="flex:1;display:flex;min-height:0"><div class="side" style="width:160px;padding-top:8px;border-right:1px solid var(--bd)">${places.map(p=>`<div data-go="${p[2]}" class="${cwd===p[2]?'on':''}">${ic(p[0],18)}${p[1]}</div>`).join('')}</div>
   <div class="grid" style="flex:1;overflow:auto;padding:10px;display:flex;flex-wrap:wrap;align-content:flex-start">${items.map(p=>`<div class="tile" data-p="${esc(p)}">${fileIcon(p,48)}${esc(label(p))}</div>`).join('')||'<p style="color:var(--dim)">This folder is empty.</p>'}</div></div>
-  <div style="padding:5px 12px;border-top:1px solid var(--bd);color:var(--dim);font-size:12px">${items.length} items</div></div>`;
+  <div style="padding:5px 12px;border-top:1px solid var(--bd);color:var(--dim);font-size:12px">${items.length} items${U().cloud&&isCloudPath(cwd)?' · '+cloudStatus():''}</div></div>`;
   const fi=$('input[type=file]',b),grid=$('.grid',b);
   fi.onchange=()=>{const f=fi.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{if(put(join(cwd,f.name),{t:'f',m:f.type||'application/octet-stream',d:r.result}))refreshAll()};r.readAsDataURL(f)};
   const pick=t=>{sel=t.dataset.p;b.querySelectorAll('.tile').forEach(x=>x.classList.toggle('sel',x===t))};
@@ -693,7 +1020,7 @@ function filesApp(b,start){
    const g=e.target.closest('[data-go]');if(g){cwd=g.dataset.go;sel=null;return draw()}
    const t=e.target.closest('.tile');if(t){pick(t);dbl(t.dataset.p,()=>openP(t.dataset.p));return}
    const a=e.target.dataset.a;
-   if(a==='up'){cwd=parent(cwd);sel=null;draw()}else if(a==='nd')newItem(cwd,'d');else if(a==='nt')newItem(cwd,'f');else if(a==='upl')fi.click();
+   if(a==='up'){cwd=parent(cwd);sel=null;draw()}else if(a==='nd')newItem(cwd,'d');else if(a==='nt')newItem(cwd,'f');else if(a==='upl')fi.click();else if(a==='sync')cloudSync(true);
   };
   grid.oncontextmenu=e=>{const t=e.target.closest('.tile');
    if(t){pick(t);menu(e,itemMenu(t.dataset.p,openP))}
@@ -1671,16 +1998,6 @@ async function pickPhotoWall(i){
  }catch(e){}
  U().wallImg=null;U().wall=PHOTO_BASE+i;save();applyWall();toast('Desktop background changed. This one loads from the web, so it needs internet.');
 }
-function importBox(el,done){ // restore UI used by setup and Settings
- el.innerHTML=`<p style="color:var(--dim);margin-top:0">Choose a backup file or paste its contents, then enter the backup password.</p><input type="file" accept=".json,application/json" style="width:100%"><textarea rows="3" placeholder="Or paste backup text here"></textarea><input type="password" placeholder="Backup password" style="width:100%;margin:6px 0"><button class="pri im">Restore</button>`;
- $('.im',el).onclick=async()=>{
-  try{
-   const f=$('input[type=file]',el).files[0];const txt=f?await f.text():$('textarea',el).value;
-   const o=await unseal(txt,$('input[type=password]',el).value);
-   DB.users[o.name]=o.rec;persist();toast('Restored the account “'+o.name+'”');done(o.name);
-  }catch(e){toast('Couldn’t restore. Check the file and password.')}
- };
-}
 function settingsApp(b,tab){
  const tabs=[['gear','General'],['monitor','Display'],['speaker','Sound'],['dock','Dock'],['access','Accessibility'],['bell','Notifications'],['globe','Browser'],['app','Apps'],['brush','Personalization'],['drive','Storage'],['user','Accounts'],['cloud','Backup'],['key','Activation'],['down','Update'],['info','About']];
  b.innerHTML=`<div class="fill" style="flex-direction:row"><div class="side" style="width:190px;padding-top:10px;border-right:1px solid var(--bd);background:#242424;overflow:auto">${tabs.map(t=>`<div data-t="${t[1]}">${ic(t[0],20)}${t[1]}</div>`).join('')}</div><div class="pg" style="flex:1;overflow:auto;padding:18px"></div></div>`;
@@ -1701,19 +2018,18 @@ function settingsApp(b,tab){
   Apps:()=>`<h2 style="margin-top:0">Apps</h2><div class="card">${tg('startApps','Show installed apps in the Start menu')}${row2('Store sources','Addresses of app catalogs, separated by commas',`<input data-k="storeSrc" value="${esc(S().storeSrc)}" style="width:260px">`)}</div><p style="color:var(--dim)">Apps you open or install are kept in the Applications folder.</p>`,
   Personalization:()=>{const u=U(),imgs=Object.keys(u.fs).filter(k=>u.fs[k].m&&u.fs[k].m.startsWith('image'));
    return`<h2 style="margin-top:0">Personalization</h2><p>Background</p>${WALLS.map((w,i)=>(i===PHOTO_BASE?'<p>Photos</p>':'')+`<div class="wp ${!u.wallImg&&(u.wall||0)===i?'on':''}" data-w="${i}" style="background:${w}"></div>`).join('')}<p>Accent color</p>${ACC.map(c=>`<span class="sw2 ${S().accent===c?'on':''}" data-acc="${c}" style="background:${c}"></span>`).join('')}<p>Your pictures</p>${imgs.map(k=>`<div class="wp ${u.wallImg===k?'on':''}" data-img="${esc(k)}" title="${esc(base(k))}" style="background-image:url('${u.fs[k].d}')"></div>`).join('')||'<p style="color:var(--dim)">No pictures yet. Browse for one below.</p>'}<br><button class="pri" id="bp">Browse for a picture</button>`},
-  Accounts:()=>`<h2 style="margin-top:0">Accounts</h2><div class="card" style="display:flex;gap:14px;align-items:center">${avHtml(me,56)}<div><b>${esc(me)}</b><br><span style="color:var(--dim)">Local account</span></div></div><div class="card"><b>Profile picture</b><p style="color:var(--dim);margin:4px 0 8px">Pick a picture from this PC, upload one, or use a picture from the internet.</p><div>${pfpTiles()}</div><br><button class="pri" id="pfu">Upload a picture</button> <button id="pfw">Use an online picture</button> <button id="pfx">Remove picture</button><input type="file" id="pff" accept="image/*" hidden></div><button id="lo">Sign out</button> <button id="cpw">Change password</button> <button id="dl">Remove this account</button>`,
-  Backup:()=>`<h2 style="margin-top:0">Backup and restore</h2><div class="card"><b>Back up your files</b><p style="color:var(--dim)">Saves your account and all files into one password-protected file.</p><input id="ep" type="password" placeholder="Choose a password"> <button class="pri" id="ex">Back up now</button><textarea id="eo" rows="3" hidden style="margin-top:8px"></textarea></div><div class="card"><b>Restore from a backup</b><div id="imp" style="margin-top:8px"></div></div>`,
+  Accounts:()=>`<h2 style="margin-top:0">Accounts</h2><div class="card" style="display:flex;gap:14px;align-items:center">${avHtml(me,56)}<div><b>${esc(me)}</b><br><span style="color:var(--dim)">${U().cloud?'Cloud account: '+esc(U().cloud.email):'Local account'}</span></div></div><div class="card"><b>Profile picture</b><p style="color:var(--dim);margin:4px 0 8px">Pick a picture from this PC, upload one, or use a picture from the internet.</p><div>${pfpTiles()}</div><br><button class="pri" id="pfu">Upload a picture</button> <button id="pfw">Use an online picture</button> <button id="pfx">Remove picture</button><input type="file" id="pff" accept="image/*" hidden></div><button id="lo">Sign out</button> <button id="cpw">Change password</button> <button id="dl">Remove this account</button>`,
+  Backup:()=>backupHtml(),
   Activation:()=>`<h2 style="margin-top:0">Activation</h2><div class="card"><b>Storage plan: ${gbName(U().gb)}</b><p style="color:var(--dim)">Enter a product key to change your storage plan.</p><input id="pk" placeholder="XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX" style="width:100%"><br><br><button class="pri" id="ak">Activate</button></div>`
  };
  const show=t=>{
   pg.innerHTML=pages[t]();bindSet(pg);b.querySelectorAll('.side div').forEach(d=>d.classList.toggle('on',d.dataset.t===t));
-  if(t==='Accounts'){acctPfp(pg,()=>show(t));$('#lo',pg).onclick=logout;$('#cpw',pg).onclick=async()=>{const v=await ask('New password (leave blank for none)','');if(v===null)return;U().h=await sha(v+me);U().blank=!v;save();toast(v?'Password changed':'Password removed')};$('#dl',pg).onclick=async()=>{if(await ask('Remove this account and all of its files?',null)){delete DB.users[me];persist();logout()}}}
+  if(t==='Accounts'){acctPfp(pg,()=>show(t));$('#lo',pg).onclick=logout;$('#cpw',pg).onclick=async()=>{const cl=!!U().cloud,v=await ask(cl?'New password (8 or more characters)':'New password (leave blank for none)','');if(v===null)return;
+   if(cl){if(v.length<8)return toast('Choose a password with at least 8 characters.');try{await cloudSetPassword(v)}catch(e){return toast('Couldn’t change the password. Check your connection and try again.')}U().h=await sha(v+me);U().blank=false;save();return toast('Password changed')}
+   U().h=await sha(v+me);U().blank=!v;save();toast(v?'Password changed':'Password removed')};$('#dl',pg).onclick=async()=>{if(await ask('Remove this account and all of its files?',null)){delete DB.users[me];persist();logout()}}}
   if(t==='Update')bindUpdate(pg);
   if(t==='Activation')$('#ak',pg).onclick=()=>{const g=KEYS[$('#pk',pg).value.trim().toLowerCase()];if(!g)return toast('That product key isn’t valid.');U().gb=g;save();toast('Activated: '+gbName(g)+' storage');show('Activation')};
-  if(t==='Backup'){
-   $('#ex',pg).onclick=async()=>{const pw=$('#ep',pg).value;if(!pw)return toast('Choose a password first');const txt=await seal({name:me,rec:U()},pw);const o=$('#eo',pg);o.hidden=false;o.value=txt;o.select();download('AmogOs-backup-'+me+'.json','data:application/json;charset=utf-8,'+encodeURIComponent(txt));toast('Backup ready. Copy the text if no download starts.')};
-   importBox($('#imp',pg),n=>{if(n===me)show('Backup')});
-  }
+  if(t==='Backup')backupBind(pg,()=>show('Backup'));
   if(t==='Personalization'){
    $('#bp',pg).onclick=()=>$('#wpf').click();
    pg.onclick=e=>{const w=e.target.dataset.w,im=e.target.dataset.img,ac=e.target.dataset.acc;if(ac){setSetting('accent',ac);show(t)}else if(w!=null){if(+w>=PHOTO_BASE)pickPhotoWall(+w-PHOTO_BASE).then(()=>show(t));else{U().wallImg=null;U().wall=+w;save();applyWall();show(t)}}else if(im){setWall(im);show(t)}};
@@ -1850,7 +2166,7 @@ function boot(){
  $('#login').style.display='none';$('#os').style.display='block';applyWall();sfx('startup');
  for(const k in running)delete running[k];$('#desk').querySelectorAll('.win').forEach(w=>w.remove());
  renderStart();ensureApps();
- renderDesk();paintPins();applySettings();
+ renderDesk();paintPins();applySettings();cloudStart();
  if(S().autoUpdate)setTimeout(()=>checkUpdate(true),2500); // shows the update notification if a newer release exists
 }
 /* Desktop icons: one click selects, two clicks open */
@@ -1884,7 +2200,7 @@ $('#sm').onclick=e=>{const am=e.target.closest('[data-amo]');if(am){$('#sm').sty
 $('#sm').oncontextmenu=e=>{const n=e.target.closest('.g div')?.dataset.n;if(n)menu(e,[['Open',()=>{$('#sm').style.display='none';openApp(n)}]])};
 $('#desk').onpointerdown=()=>$('#sm').style.display='none';
 setInterval(tick,1000);
-function logout(){sfx('shutdown');me=null;$('#dim').style.opacity=0;$('#night').style.opacity=0;const h=document.documentElement;h.dataset.hc=h.dataset.rm=h.dataset.bc='0';h.style.setProperty('--acc','#4cc2ff');h.style.setProperty('--fs','14px');$('#os').style.display='none';loginScreen()}
+function logout(){sfx('shutdown');cloudStop(true);me=null;$('#dim').style.opacity=0;$('#night').style.opacity=0;const h=document.documentElement;h.dataset.hc=h.dataset.rm=h.dataset.bc='0';h.style.setProperty('--acc','#4cc2ff');h.style.setProperty('--fs','14px');$('#os').style.display='none';loginScreen()}
 
 /* ================= Sign-in and account setup ================= */
 function loginScreen(auto){const names=Object.keys(DB.users);if(names.length)lockScreen(names[0],auto&&names.length===1);else oobe(0)}
@@ -1894,38 +2210,49 @@ function lockScreen(sel,auto){const bl=DB.users[sel].blank;if(auto&&bl){me=sel;r
  ${avHtml(sel,110)}<h2 style="font-weight:400;margin:12px 0">${esc(sel)}</h2>
  ${bl?'<button class="pri" id="si" style="width:140px;justify-content:center">Sign in</button>':'<div style="display:flex;gap:6px"><input id="pw" type="password" placeholder="Password" autofocus><button class="pri" id="si" style="width:44px;justify-content:center">→</button></div>'}
  <div style="margin-top:26px;display:flex;gap:8px;flex-wrap:wrap;justify-content:center">${names.filter(n=>n!==sel).map(n=>`<button data-u="${esc(n)}">${esc(n)}</button>`).join('')}<button data-u="_new">Add user</button></div></div>`;
- const go=async()=>{const u=DB.users[sel];if(u.blank||u.h===await sha($('#pw').value+sel)){me=sel;boot()}else toast('The password is incorrect. Try again.')};
+ const go=async()=>{const u=DB.users[sel],pw=$('#pw')?$('#pw').value:'';
+  if(u.blank||u.h===await sha(pw+sel)){CSES.pw=pw;me=sel;boot();return}
+  if(u.cloud&&cloudReady()){ // the password may have been changed on another device, so ask the server
+   try{await cloudSignIn(u.cloud.email,pw);u.h=await sha(pw+sel);u.blank=false;me=sel;persist();boot();return}catch(e){}
+  }
+  toast('The password is incorrect. Try again.')};
  $('#si').onclick=go;if($('#pw'))$('#pw').onkeydown=e=>{if(e.key==='Enter')go()};
  L.onclick=e=>{const u=e.target.dataset.u;if(u)u==='_new'?oobe(0,true):lockScreen(u)};
 }
-/* Windows-style first-run setup: name, password, product key, finish */
+/* First-run setup: welcome, sign in (or create an account), product key, finish.
+   The account is an AmogOs cloud account (email + password). The local record is made at the end. */
 function oobe(step,canBack){
  const L=$('#login');L.style.display='block';L.onclick=null;
- const S=oobe.S=oobe.S||{name:'',pw:'',key:''};
- const nav=()=>`<div class="nav"><button id="bk">Back</button><button class="pri" id="nx">Next</button></div>`;
- const pages=[
-  `<h1>Let’s set up your device</h1><p>It only takes a minute. You’ll create an account, protect it with a password, and pick your storage plan.</p><div class="nav"><span><a href="#" id="rs">Restore from a backup</a>${canBack?' &nbsp;·&nbsp; <a href="#" id="cb">Back to sign in</a>':''}</span><button class="pri" id="nx">Get started</button></div>`,
-  `<h1>Who’s going to use this PC?</h1><p>Choose a name for your account.</p><input id="v" placeholder="User name" value="${esc(S.name)}">${nav()}`,
-  `<h1>Create a password</h1><p>You’ll use this to sign in. Leave it blank if you want to open your account instantly.</p><input id="v" type="password" placeholder="Password (optional)"><input id="v2" type="password" placeholder="Re-enter password">${nav()}`,
-  `<h1>Enter your product key</h1><p>A key sets your storage plan. Without one you’ll get ${DEFAULT_GB} GB. You can add one later in Settings.</p><input id="v" placeholder="XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX" value="${esc(S.key)}">${nav()}<p style="margin-top:14px"><a href="#" id="sk">Skip for now</a></p>`,
-  `<div style="text-align:center"><h1>Hi, ${esc(S.name)}</h1><p>We’re getting everything ready for you</p><div class="spin" style="margin:30px auto"></div></div>`
- ];
- L.innerHTML=`<div class="center"><div class="oobe">${step==='restore'?'<h1>Restore from a backup</h1><div id="imp"></div><div class="nav"><button id="bk">Back</button></div>':pages[step]}</div></div>`;
+ const S=oobe.S=oobe.S||{email:'',pw:'',key:''};
+ const nav=`<div class="nav"><button id="bk">Back</button><button class="pri" id="nx">Next</button></div>`;
+ const pages={
+  0:`<h1>Let’s set up your device</h1><p>It only takes a minute. You’ll sign in with your AmogOs account (or make one), then pick your storage plan.</p><div class="nav"><span>${canBack?'<a href="#" id="cb">Back to sign in</a>':''}</span><button class="pri" id="nx">Get started</button></div>`,
+  signin:`<h1>Sign in to your account</h1><div id="cauth"></div>`,
+  key:`<h1>Enter your product key</h1><p>A key sets your storage plan. Without one you’ll get ${DEFAULT_GB} GB. You can add one later in Settings.</p><input id="v" placeholder="XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX" value="${esc(S.key)}">${nav}<p style="margin-top:14px"><a href="#" id="sk">Skip for now</a></p>`,
+  done:`<div style="text-align:center"><h1>Hi, ${esc(S.email.split('@')[0])}</h1><p>We’re getting everything ready for you</p><div class="spin" style="margin:30px auto"></div></div>`
+ };
+ L.innerHTML=`<div class="center"><div class="oobe">${pages[step]}</div></div>`;
  const on=(id,f)=>{const e=$(id,L);if(e)e.onclick=ev=>{ev.preventDefault();f()}};
- if(step==='restore'){importBox($('#imp',L),()=>{oobe.S=null;loginScreen()});return on('#bk',()=>oobe(0,canBack))}
- on('#rs',()=>oobe('restore',canBack));on('#cb',()=>{oobe.S=null;lockScreen(Object.keys(DB.users)[0])});
- on('#bk',()=>oobe(step-1,canBack));
+ if(step===0){
+  on('#cb',()=>{oobe.S=null;lockScreen(Object.keys(DB.users)[0])});
+  on('#nx',()=>oobe('signin',canBack));
+  return;
+ }
+ if(step==='signin'){
+  cloudAuth($('#cauth',L),({email,pw})=>{
+   if(DB.users[email]){oobe.S=null;toast('That account is already on this PC. Sign in below.');return lockScreen(email)}
+   S.email=email;S.pw=pw;oobe('key',canBack);
+  },()=>oobe(0,canBack));
+  return;
+ }
  const v=$('#v',L);if(v)v.focus();
- on('#sk',()=>{S.key='';oobe(4,canBack)});
- on('#nx',async()=>{
-  if(step===0)return oobe(1,canBack);
-  if(step===1){const n=v.value.trim();if(!n)return toast('Enter a name to continue');if(DB.users[n])return toast('That name is already in use');S.name=n;return oobe(2,canBack)}
-  if(step===2){if(v.value!==$('#v2',L).value)return toast('The passwords don’t match');S.pw=v.value;return oobe(3,canBack)}
-  if(step===3){S.key=v.value.trim().toLowerCase();if(S.key&&!KEYS[S.key])return toast('That product key isn’t valid.');oobe(4,canBack)}
- });
- if(step===4)setTimeout(async()=>{
-  DB.users[S.name]={h:await sha(S.pw+S.name),blank:!S.pw,gb:KEYS[S.key]||DEFAULT_GB,wall:0,fs:starterFS()};me=S.name;
-  if(!save()){delete DB.users[S.name];me=null;return oobe(1,canBack)}
+ on('#bk',()=>oobe('signin',canBack));
+ on('#sk',()=>{S.key='';oobe('done',canBack)});
+ on('#nx',()=>{S.key=v.value.trim().toLowerCase();if(S.key&&!KEYS[S.key])return toast('That product key isn’t valid.');oobe('done',canBack)});
+ if(step==='done')setTimeout(async()=>{
+  DB.users[S.email]={h:await sha(S.pw+S.email),blank:false,gb:KEYS[S.key]||DEFAULT_GB,wall:0,fs:starterFS(),cloud:{uid:CSES.uid,email:S.email,rt:CSES.rt,map:{}}};
+  me=S.email;ensureCloudRoot();
+  if(!save()){delete DB.users[S.email];me=null;return oobe('key',canBack)}
   oobe.S=null;boot();
  },2200);
 }
