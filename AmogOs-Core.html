@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>AmogOs</title>
-<meta name="amogos-version" content="1.4.0">
+<meta name="amogos-version" content="1.5.0">
 <script>
 /* ===== Patch loader =====
    The version of this file is the meta tag above (the ONLY place to change it for a release).
@@ -230,6 +230,12 @@ input[type=range]{padding:0;border:0;background:none;accent-color:var(--acc)}
 .bmbar{display:none;gap:4px;padding:4px 8px;border-bottom:1px solid var(--bd);overflow-x:auto;flex:none}.bmk{padding:3px 10px;white-space:nowrap}
 .hi{padding:6px 8px;border-radius:6px;cursor:default}.hi:hover{background:#ffffff14}.hi small{color:var(--dim);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .scard{width:210px;background:var(--sf);border:1px solid var(--bd);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.stabs{display:flex;gap:4px;padding:6px 12px 0;border-bottom:1px solid var(--bd)}
+.stabs button{border-radius:8px 8px 0 0;background:none;border:0;padding:7px 14px;opacity:.7}
+.stabs button.on{opacity:1;background:var(--sf);box-shadow:inset 0 -2px 0 var(--acc)}
+.badge{display:inline-block;font-size:11px;padding:1px 8px;border-radius:9px;background:#ffffff1f}
+.badge.ok{background:#22c55e33;color:#4ade80}
+.badge.off{background:#f59e0b33;color:#fbbf24}
 #sm .g{max-height:60vh;overflow:auto}
 /* Software update notification (top right corner) */
 .uprog{height:8px;background:#ffffff26;border-radius:4px;overflow:hidden;margin:0 0 12px}.uprog i{display:block;height:100%;width:0;background:var(--acc);transition:width .2s}
@@ -297,6 +303,13 @@ html[data-rm="1"] .mu .disc.spin .ring{animation:none}
 #os[data-tb="1"][data-dock=left] #desk{inset:var(--tbh) 0 0 var(--tk)}
 #os[data-tb="1"][data-dock=right] #desk{inset:var(--tbh) var(--tk) 0 0}
 #os[data-tb="1"][data-dock=left] #task,#os[data-tb="1"][data-dock=right] #task{top:var(--tbh)}
+/* Fixes: with the dock auto-hidden the desktop used to start at the very top, so the top bar covered it. Keep it below the bar. */
+#os[data-tb="1"][data-hide="1"] #desk{inset:var(--tbh) 0 0 0!important}
+/* The top bar never spills past the screen: it clips, and on narrow screens the File/Edit/View/Help menus fold away so the clock and account stay visible. */
+#os[data-tb="1"] #topbar{overflow:hidden;white-space:nowrap}
+#topbar button{flex:none}
+@media (max-width:760px){#topbar [data-m=File],#topbar [data-m=Edit],#topbar [data-m=View],#topbar [data-m=Help]{display:none}}
+@media (max-width:480px){#topbar .tb-app{display:none}}
 </style>
 </head>
 <body>
@@ -319,7 +332,7 @@ const $=(s,e=document)=>e.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const enc=new TextEncoder(),dec=new TextDecoder();
 /* ----- Settings store: per-user, with defaults ----- */
-const OS_VERSION=(document.querySelector('meta[name=amogos-version]')||{}).content||'1.4.0',OS_REPO='FallGameDev/OS.Lite'; // the version is the <meta name=amogos-version> tag at the top of this file
+const OS_VERSION=(document.querySelector('meta[name=amogos-version]')||{}).content||'1.5.0',OS_REPO='FallGameDev/OS.Lite'; // the version is the <meta name=amogos-version> tag at the top of this file
 const STORE_RAW='https://raw.githubusercontent.com/FallGameDev/OS.Lite/main/apps/'; // app packages live in the apps folder of OS.Lite
 /* ----- AmogOs Cloud settings -----
    Fill these in once (steps are in AmogOs-Cloud-Setup.html).
@@ -327,7 +340,7 @@ const STORE_RAW='https://raw.githubusercontent.com/FallGameDev/OS.Lite/main/apps
 const CLOUD={
  url:'https://mcqpodbwtwhjhkycwhzf.supabase.co', // your Supabase project address
  key:'sb_publishable_a9xAXPeYwoNgNwRaCkx8RQ_0RrQ3gtV',             // Supabase anon (publishable) key. Never put the service key here.
- mail:'https://script.google.com/macros/s/AKfycbwHg3NhvYz3FgVLpyI0d_TKT2e7dpkq5nqbWWOCmaQLaGZ8mX-0c7umcrbXBgHQNFkP/exec',      // Google Apps Script web app address (sends the code and creates accounts)
+ mail:'https://script.google.com/macros/s/AKfycbyPiPBQBXUgRTs-LH-H5z4NWeoa4JKFyyhnal3mVV3UjuFX0egXY7-uLH9IDt2Hrhuj/exec',      // Google Apps Script web app address (sends the code and creates accounts)
  maxFile:10*1024*1024                            // biggest file The Cloud accepts (10 MB)
 };
 const DEF={device:'AMOG-PC',h24:false,secs:false,dfmt:'short',confirmDel:false,maxWin:false,brightness:100,scale:100,night:false,nightAmt:30,sounds:true,volume:60,dock:'bottom',dockSize:'m',align:'center',autohide:false,clock:true,showStart:true,textSize:14,hc:false,rm:false,bigcur:false,filter:'none',notif:true,dur:3,accent:'#4cc2ff',engine:'google',edgeUrl:'https://mcqpodbwtwhjhkycwhzf.supabase.co/functions/v1/fetch-page',edgeKey:'',proxy:'',storeSrc:'',startApps:true,autoUpdate:true,topbar:false,clockAt:'topbar',autoInstall:false};
@@ -347,6 +360,7 @@ const IC={
  paint:P('<path fill="#e9e4da" d="M24 5C12 5 4 13 4 23s7 20 17 20c4 0 5-3 3-5s-1-5 3-5h7c6 0 10-3 10-9C44 12 35 5 24 5z"/><circle cx="14" cy="22" r="3.5" fill="#ef4444"/><circle cx="21" cy="13" r="3.5" fill="#3b82f6"/><circle cx="32" cy="14" r="3.5" fill="#22c55e"/><circle cx="38" cy="24" r="3.5" fill="#facc15"/>'),
  globe:P('<circle cx="24" cy="24" r="20" fill="#2f8cff"/><path fill="#3ccf6e" d="M12 14c5-3 9-1 9 3s-5 4-5 9-5 3-7-2c-2-4-1-8 3-10zM28 8c5 0 11 4 13 10-4 1-6-2-9-1s-4-5-4-9zM30 27c4-2 9 0 10 4-2 6-7 10-12 10 2-4-2-6 2-14z"/><circle cx="24" cy="24" r="20" fill="none" stroke="#1e5fc2" stroke-width="2"/>'),
  calc:P('<rect x="8" y="4" width="32" height="40" rx="5" fill="#4b5563"/><rect x="12" y="8" width="24" height="9" rx="2" fill="#9be7c4"/><g fill="#f97316"><rect x="12" y="21" width="6" height="6" rx="1.5"/><rect x="21" y="21" width="6" height="6" rx="1.5"/><rect x="30" y="21" width="6" height="6" rx="1.5"/></g><g fill="#e5e7eb"><rect x="12" y="30" width="6" height="6" rx="1.5"/><rect x="21" y="30" width="6" height="6" rx="1.5"/></g><rect x="30" y="30" width="6" height="10" rx="1.5" fill="#3b82f6"/>'),
+ term:P('<rect x="4" y="7" width="40" height="34" rx="6" fill="#1f2937"/><rect x="4" y="7" width="40" height="8" rx="4" fill="#374151"/><path d="M12 22l8 6-8 6" fill="none" stroke="#4ade80" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M24 35h12" stroke="#e5e7eb" stroke-width="3.5" stroke-linecap="round"/>'),
  gear:P('<circle cx="24" cy="24" r="15" fill="none" stroke="#9ca3af" stroke-width="7" stroke-dasharray="5.2 4.2"/><circle cx="24" cy="24" r="12" fill="#cbd5e1"/><circle cx="24" cy="24" r="5" fill="#475569"/>'),
  win:P('<defs><linearGradient id="gw" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#67e8f9"/><stop offset="1" stop-color="#8b5cf6"/></linearGradient></defs><ellipse cx="24" cy="25" rx="21" ry="7" fill="none" stroke="#f0abfc" stroke-width="3.5" transform="rotate(-18 24 24)"/><circle cx="24" cy="24" r="11.5" fill="url(#gw)"/><path fill="none" stroke="#f0abfc" stroke-width="3.5" stroke-linecap="round" d="M8.5 29.5A21 7 0 0 0 39.5 18.5" transform="rotate(0 24 24)" opacity=".0"/>'),
  trash:P('<path fill="#94a3b8" d="M10 15h28l-3 27a3 3 0 0 1-3 3H16a3 3 0 0 1-3-3z"/><rect x="7" y="9" width="34" height="5" rx="2.5" fill="#cbd5e1"/><rect x="18" y="4" width="12" height="5" rx="2" fill="#cbd5e1"/><path stroke="#64748b" stroke-width="3" stroke-linecap="round" d="M19 22v16M24 22v16M29 22v16"/>'),
@@ -558,9 +572,13 @@ async function cloudSetPassword(pw){ // changes the account password on the serv
  if(!r.ok)throw new Error('pw');
 }
 async function mailCall(body){ // talks to the Google Apps Script. Sent as plain text on purpose: no custom headers means no CORS preflight, which Apps Script can't answer.
- const r=await fetch(CLOUD.mail,{method:'POST',body:JSON.stringify(body)});
- return r.json();
+ let t;
+ try{const r=await fetch(CLOUD.mail,{method:'POST',body:JSON.stringify(body)});t=await r.text()}
+ catch(e){const x=new Error('mail');x.detail='The browser could not connect to the script (blocked, offline, or the script link is wrong).';throw x}
+ try{return JSON.parse(t)}
+ catch(e){const x=new Error('mail');x.detail='The script sent back something unexpected: '+t.replace(/<[^>]+>/g,' ').replace(/ +/g,' ').trim().slice(0,160);throw x}
 }
+const netMsg=e=>'Couldn’t reach the server. '+(e&&e.detail?e.detail:'Check your connection and try again.');
 const mailMsg=e=>({
  email_in_use:'That email is already being used. Try signing in instead.',
  too_soon:'A code was just sent. Wait a minute, then try again.',
@@ -622,7 +640,7 @@ function cloudAuth(el,onDone,onBack){
      const r=await mailCall({action:'send',email});
      if(!r.ok){lock(false);return msg(mailMsg(r.error))}
      st.email=email;st.pw=pw;st.mode='code';draw();
-    }catch(e){lock(false);msg('Couldn’t reach the server. Check your connection and try again.')}
+    }catch(e){lock(false);msg(netMsg(e))}
    };
    bind('#cs',go);enter(go);
    bind('#cl',()=>{st.email=$$('#ce').value.trim();st.mode='in';draw()});
@@ -636,7 +654,7 @@ function cloudAuth(el,onDone,onBack){
     const code=cc.value.trim().toUpperCase();
     if(code.length!==6)return msg('Enter the 6 character code.');
     lock(true);msg('Checking the code…',true);
-    let r;try{r=await mailCall({action:'verify',email:st.email,code,password:st.pw})}catch(e){lock(false);return msg('Couldn’t reach the server. Check your connection and try again.')}
+    let r;try{r=await mailCall({action:'verify',email:st.email,code,password:st.pw})}catch(e){lock(false);return msg(netMsg(e))}
     if(!r.ok){lock(false);return msg(mailMsg(r.error))}
     msg('Account created. Signing you in…',true);
     try{await cloudSignIn(st.email,st.pw)}catch(e){st.mode='in';draw();return msg('Your account was created. Sign in to continue.',true)}
@@ -646,7 +664,7 @@ function cloudAuth(el,onDone,onBack){
    bind('#cl',()=>{st.mode='new';draw()});
    bind('#cr',async()=>{
     lock(true);msg('Sending a new code…',true);
-    try{const r=await mailCall({action:'send',email:st.email});lock(false);msg(r.ok?'A new code is on its way.':mailMsg(r.error),r.ok)}catch(e){lock(false);msg('Couldn’t reach the server. Check your connection and try again.')}
+    try{const r=await mailCall({action:'send',email:st.email});lock(false);msg(r.ok?'A new code is on its way.':mailMsg(r.error),r.ok)}catch(e){lock(false);msg(netMsg(e))}
    });
   }
  };
@@ -869,7 +887,7 @@ function amoRun(p){
  let pkg;try{pkg=JSON.parse(atob(U().fs[p].d.split(',')[1]));if(pkg.amo!==1||!pkg.files)throw 0}catch(e){return toast('That app package couldn’t be opened.')}
  openWin({n:'App:'+(pkg.id||pkg.name),i:'app',img:pkg.icon,pin:'amo:'+p},pkg.name||base(p),Math.min(pkg.width||900,innerWidth-10),Math.min(pkg.height||560,innerHeight-100),b=>{
   b.innerHTML='<div class="fill" style="align-items:center;justify-content:center;background:#000"><div class="spin"></div></div>';
-  setTimeout(()=>{try{const w=document.createElement('div');w.className='fill';const f=document.createElement('iframe');f.style.cssText='flex:1;border:0;background:#000';f.setAttribute('sandbox','allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-pointer-lock');f.dataset.amo='1';f.setAttribute('allow','autoplay;fullscreen;gamepad;clipboard-write;pointer-lock');f.srcdoc=amoBuild(pkg);f.addEventListener('load',()=>{try{f.contentWindow.focus()}catch(e){}});w.appendChild(f);b.innerHTML='';b.appendChild(w)}catch(e){toast('This app couldn’t start.')}},60);
+  setTimeout(()=>{try{const w=document.createElement('div');w.className='fill';const f=document.createElement('iframe');f.style.cssText='flex:1;border:0;background:#000';f.setAttribute('sandbox','allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-pointer-lock');f.dataset.amo='1';f.setAttribute('allow','autoplay;fullscreen;gamepad;clipboard-write;pointer-lock');f.srcdoc=amoShim(amoBuild(pkg),amoPrefix(pkg.id||pkg.name||'app'));f.addEventListener('load',()=>{try{f.contentWindow.focus()}catch(e){}});w.appendChild(f);b.innerHTML='';b.appendChild(w)}catch(e){toast('This app couldn’t start.')}},60);
  });
 }
 
@@ -1196,7 +1214,7 @@ const engineUrl=q=>(ENGINES[S().engine]||ENGINES.google)[1].replace('{q}',encode
 /* ----- How Comet loads a page -----
    SBX_FULL: normal frame rules (used for saved .html files and direct loads).
    SBX_SAFE: no allow-same-origin, so a page that came through the fetcher can NEVER read the OS files or accounts. */
-const SBX_FULL='allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-pointer-lock';
+const SBX_FULL='allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-pointer-lock allow-downloads';
 const SBX_SAFE='allow-scripts allow-forms allow-popups allow-modals allow-pointer-lock';
 let fetcherTip=false;
 
@@ -1339,16 +1357,42 @@ function navScript(cfg){return '('+function(C){
    if(/^(IMG|SOURCE|VIDEO|AUDIO|TRACK)$/.test(t)){if(a==='src'||a==='poster')v=via(v);else if(a==='srcset')v=viaSet(v)}
    return sa.call(this,n,v)};
  }
- // 5. Links and searches go back to Comet so the next page also loads through the fetcher.
- var send=function(u,nt){parent.postMessage({comet:u,nt:!!nt},'*')};
+ // 5. Links, downloads and searches go back to Comet so the next page also loads through the fetcher.
+ var send=function(u,nt,dl){parent.postMessage({comet:u,nt:!!nt,dl:dl==null?null:String(dl)},'*')};
+ function saveLocal(a){ // a data: or blob: link the page made itself: read it here, then hand the bytes to Comet
+  fetch(a.href).then(function(r){return r.arrayBuffer().then(function(b){parent.postMessage({cometDl:1,name:a.getAttribute('download')||'download',type:r.headers.get('content-type')||'',body:b},'*')})}).catch(function(){});
+ }
+ function linkClick(a,nt){ // true when the link was handled here
+  var h=a.href;
+  if(a.hasAttribute('download')){
+   if(/^(data|blob):/i.test(h)){saveLocal(a);return true}
+   if(/^https?:/i.test(h)){send(h,false,a.getAttribute('download'));return true}
+   return false;
+  }
+  if(/^(mailto|tel):/i.test(h)){parent.postMessage({cometExt:h},'*');return true}
+  if(!/^https?:/i.test(h))return false;
+  if(h.indexOf('#')>-1&&h.split('#')[0]===document.baseURI.split('#')[0]){ // jump inside the same page
+   var id=decodeURIComponent(h.split('#')[1]),el=document.getElementById(id)||document.getElementsByName(id)[0];if(el)el.scrollIntoView();return true;
+  }
+  send(h,nt||a.target==='_blank');return true;
+ }
  document.addEventListener('click',function(e){
   var a=e.target.closest&&e.target.closest('a[href]');
-  if(!a||e.defaultPrevented||e.button||e.ctrlKey||e.metaKey)return;
-  var h=a.href;if(!/^https?:/i.test(h)||a.hasAttribute('download'))return;
-  if(h.indexOf('#')>-1&&h.split('#')[0]===document.baseURI.split('#')[0]){ // jump inside the same page
-   e.preventDefault();var id=decodeURIComponent(h.split('#')[1]),el=document.getElementById(id)||document.getElementsByName(id)[0];if(el)el.scrollIntoView();return}
-  e.preventDefault();send(h,a.target==='_blank');
+  if(!a||e.defaultPrevented||e.button)return;
+  if(linkClick(a,e.ctrlKey||e.metaKey||e.shiftKey))e.preventDefault(); // ctrl, cmd or shift click opens a new tab
  },true);
+ document.addEventListener('auxclick',function(e){ // middle click opens a new tab
+  var a=e.target.closest&&e.target.closest('a[href]');
+  if(a&&e.button===1&&/^https?:/i.test(a.href)&&!a.hasAttribute('download')){e.preventDefault();send(a.href,true)}
+ },true);
+ document.addEventListener('contextmenu',function(e){ // right click on a link shows Comet's link menu
+  var a=e.target.closest&&e.target.closest('a[href]');
+  if(a&&/^https?:/i.test(a.href)){e.preventDefault();parent.postMessage({cometCtx:a.href,x:e.clientX,y:e.clientY},'*')}
+ },true);
+ var anchorClick=HTMLAnchorElement.prototype.click; // pages that build a link in code and click it (the usual way to start a download)
+ HTMLAnchorElement.prototype.click=function(){if(linkClick(this))return;return anchorClick.apply(this,arguments)};
+ var winOpen=window.open; // window.open opens a new tab that also loads through the fetcher
+ window.open=function(u){try{var a=new URL(String(u||''),document.baseURI);if(/^https?:$/.test(a.protocol)){send(a.href,true);return null}}catch(x){}return winOpen.apply(window,arguments)};
  document.addEventListener('submit',function(e){ // searches and other GET forms
   var f=e.target;if(!f||(f.method||'get').toLowerCase()!=='get'||e.defaultPrevented)return;
   e.preventDefault();var u=new URL(f.getAttribute('action')||document.baseURI,document.baseURI);
@@ -1427,6 +1471,58 @@ async function inlineResources(html,base){
 function msgPage(title,u,detail){ // loading and error screens shown inside a tab
  return '<!doctype html><body style="margin:0;font-family:Segoe UI,sans-serif;background:#1f1f1f;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;text-align:center"><div style="max-width:420px;padding:20px"><h2 style="font-weight:400">'+esc(title)+'</h2><p style="opacity:.7;word-break:break-all">'+esc(u)+'</p>'+(detail?'<p style="opacity:.85">'+esc(detail)+'</p><a target="_blank" style="color:#4cc2ff" href="'+esc(u)+'">Open in a real browser tab</a>':'')+'</div></body>';
 }
+/* ================= Downloads =================
+   savePlace() asks where a download should go (a folder and a file name).
+   saveDownload() turns the downloaded bytes into a file on this PC. Used by Comet and by the App Store. */
+const folderList=()=>['/',...Object.keys(U().fs).filter(k=>U().fs[k].t==='d').sort()];
+function savePlace(msg,dir,name){ // resolves {dir,name} or null when cancelled
+ sfx('ask');
+ return new Promise(res=>{
+  const dirs=folderList();if(!dirs.includes(dir))dir=dirs.includes('/Downloads')?'/Downloads':'/';
+  const m=document.createElement('div');m.className='modal';
+  m.innerHTML=`<div class="dlg"><p style="margin-top:0">${msg}</p>
+   <label style="color:var(--dim);font-size:12px">Save in</label>
+   <select id="sd" style="width:100%;margin:4px 0 10px">${dirs.map(d=>`<option value="${esc(d)}" ${d===dir?'selected':''}>${d==='/'?'This PC':esc(d)}</option>`).join('')}</select>
+   <label style="color:var(--dim);font-size:12px">File name</label>
+   <input id="sn" style="width:100%;margin-top:4px">
+   <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px"><button class="pri" id="ok">Download</button><button id="no">Cancel</button></div></div>`;
+  document.body.appendChild(m);
+  const n=$('#sn',m);n.value=name;n.focus();n.select();
+  n.onkeydown=e=>{if(e.key==='Enter')$('#ok',m).click()};
+  const done=v=>{m.remove();res(v)};
+  $('#ok',m).onclick=()=>{const nm=safeName(n.value);if(!nm)return;done({dir:$('#sd',m).value,name:nm})};
+  $('#no',m).onclick=()=>done(null);
+ });
+}
+const blobToData=(blob,type)=>new Promise((ok,no)=>{const r=new FileReader();r.onload=()=>ok(r.result.replace(/^data:[^;,]*/,'data:'+(type||blob.type||'application/octet-stream')));r.onerror=()=>no(r.error);r.readAsDataURL(blob)});
+function fileNameFrom(url,disp){ // best guess at a file name from a Content-Disposition header or the address
+ let n='';
+ const m=disp&&/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disp);
+ if(m){try{n=decodeURIComponent(m[1])}catch(e){n=m[1]}}
+ if(!n){try{n=decodeURIComponent(new URL(url).pathname.split('/').filter(Boolean).pop()||'')}catch(e){}}
+ return safeName(n)||'download';
+}
+async function saveDownload(name,type,blobOrBuf,from){ // asks where to save, then writes the file
+ const blob=blobOrBuf instanceof Blob?blobOrBuf:new Blob([blobOrBuf],{type});
+ const pick=await savePlace('Download <b>'+esc(name)+'</b>?'+(from?'<br><span style="color:var(--dim);font-size:12px">from '+esc(from)+'</span>':'')+'<br><span style="color:var(--dim);font-size:12px">'+Math.max(1,Math.round(blob.size/1024))+' KB</span>','/Downloads',name);
+ if(!pick)return null;
+ let p=join(pick.dir,pick.name);
+ if(U().fs[p]){const d=pick.name.lastIndexOf('.');p=join(pick.dir,d>0?pick.name.slice(0,d)+' (1)'+pick.name.slice(d):pick.name+' (1)')}
+ const mime=/\.amo$/i.test(p)?'application/x-amo':(type||blob.type||'application/octet-stream');
+ if(!put(p,{t:'f',m:mime,d:await blobToData(blob,mime)})){toast('There isn’t enough storage for that download.');return null}
+ refreshAll();toast('Downloaded to '+p);sfx('ok');return p;
+}
+async function browserDownload(u,name){ // a link the person chose to download: fetched through the page fetcher, then saved to this PC
+ if(!S().edgeUrl){window.open(u,'_blank');return} // no page fetcher: let the real browser handle it
+ toast('Downloading…');
+ try{
+  const r=await edgeFetch(u);if(!r.ok)throw new Error('http');
+  const buf=await r.arrayBuffer(),type=(r.headers.get('x-upstream-type')||r.headers.get('content-type')||'').split(';')[0].trim(),
+   disp=r.headers.get('x-upstream-disposition')||r.headers.get('content-disposition')||'';
+  await saveDownload(name?safeName(name):fileNameFrom(r.headers.get('x-final-url')||u,disp),type,buf,hostOf(u));
+ }catch(e){toast('Couldn’t download that file.')}
+}
+
 function browserApp(b,file){
  const T=[];let cur=null,mode='';
  b.innerHTML=`<div class="fill"><div class="tabs"></div>
@@ -1450,6 +1546,7 @@ function browserApp(b,file){
     and the tab shows it, so sites that refuse to be framed still open. Without one, we fall back to a plain frame. */
  async function loadPage(t,u){
   const s=S(),n=t.req=(t.req||0)+1,el=t.el;
+  const prev={src:el.getAttribute('src'),doc:el.getAttribute('srcdoc'),sb:el.getAttribute('sandbox'),url:t.url}; // so a download can put the old page back
   if(!s.edgeUrl){
    el.setAttribute('sandbox',SBX_FULL);el.removeAttribute('srcdoc');
    el.src=s.proxy?s.proxy.replace('{url}',encodeURIComponent(u)):u;
@@ -1481,18 +1578,33 @@ function browserApp(b,file){
     if(t.blob)URL.revokeObjectURL(t.blob);
     t.blob=URL.createObjectURL(new Blob([injectNav(full||html,fin,cfg)],{type:'text/html;charset=utf-8'}));
     el.removeAttribute('srcdoc');el.src=t.blob;
-   }else{ // images, PDFs, plain text and so on
-    const type=up||(/text\/plain/.test(ct)?'text/plain':ct);
-    el.removeAttribute('srcdoc');el.src=URL.createObjectURL(new Blob([buf],{type}));
+    // a page that redirects with <meta http-equiv=refresh> (up to 10 seconds): follow it
+    const mr=/<meta[^>]+http-equiv=["']?refresh["']?[^>]*content=["']? *([0-9]+) *; *url=['"]?([^"'> ]+)/i.exec(html);
+    if(mr&&+mr[1]<=10)setTimeout(()=>{if(t.req!==n)return;let to2;try{to2=new URL(mr[2],fin).href}catch(x){return}t.hist[t.i]=to2;go(t,to2,null,true)},+mr[1]*1000);
+   }else{ // pictures, PDFs and plain text show in the tab. Anything else (or a header that says attachment) is saved to this PC.
+    const type=((up||(/text[/]plain/.test(ct)?'text/plain':ct))||'application/octet-stream').split(';')[0].trim(),
+     disp=r.headers.get('x-upstream-disposition')||r.headers.get('content-disposition')||'';
+    if(/^(image|audio|video|text)[/]|^application[/](pdf|json|xml)/.test(type)&&!/attachment/i.test(disp)){
+     el.removeAttribute('srcdoc');el.src=URL.createObjectURL(new Blob([buf],{type}));
+    }else{
+     if(prev.sb)el.setAttribute('sandbox',prev.sb); // put the page we were on back
+     if(prev.src!=null){el.removeAttribute('srcdoc');el.src=prev.src}else if(prev.doc!=null)el.srcdoc=prev.doc;else el.srcdoc=startPage();
+     if(t.fresh&&t.hist[t.i]===u){t.hist.splice(t.i,1);t.i--}
+     t.url=prev.url||'';t.title=prev.url?hostOf(prev.url):'New tab';
+     if(t===cur)sync();else strip();
+     saveDownload(fileNameFrom(fin,disp),type,buf,hostOf(fin)); // asks where to save it
+     return;
+    }
    }
-   if(t===cur){if(fin!==u)A.value=fin;sync()}else strip();
+   if(fin!==u&&t.url===u){t.url=fin;t.hist[t.i]=fin} // a redirect: keep the final address
+   if(t===cur)sync();else strip();
   }catch(err){if(t.req!==n)return;el.srcdoc=msgPage('This page couldn’t be loaded',u,err.name==='AbortError'?'The page fetcher took too long to answer.':err.message)}
  }
  function go(t,v,f,keep){ // load an address, a saved html file, or the start page
   let u='';
   if(f){t.el.setAttribute('sandbox',SBX_FULL);t.el.removeAttribute('src');t.el.srcdoc=textOf(U().fs[f].d);t.title=base(f)}
   else if(!v||!v.trim()){t.el.setAttribute('sandbox',SBX_SAFE);t.el.removeAttribute('src');t.el.srcdoc=startPage();t.title='New tab'}
-  else{u=toUrl(v);t.title=hostOf(u);loadPage(t,u);
+  else{u=toUrl(v);t.title=hostOf(u);t.fresh=!keep;loadPage(t,u);
    if(!keep){const h=BR().history;if(!h.length||h[0].url!==u){h.unshift({url:u,title:t.title,t:Date.now()});h.length=Math.min(h.length,500);persist()}}}
   t.url=u;if(!keep&&!f){t.hist=t.hist.slice(0,t.i+1);t.hist.push(u);t.i=t.hist.length-1}
   if(t===cur)sync();else strip();
@@ -1531,7 +1643,22 @@ function browserApp(b,file){
   menu(e,[['Open in new tab',()=>newTab(u)],[isB?'Remove bookmark':'Remove from history',()=>{if(isB)BR().bookmarks=BR().bookmarks.filter(y=>y.url!==u);else BR().history=BR().history.filter(y=>y.url!==u);persist();sync()}]]);
  };
  A.onkeydown=e=>{if(e.key==='Enter')go(cur,A.value)};
- const onMsg=e=>{if(!b.isConnected){removeEventListener('message',onMsg);return}const t=T.find(x=>x.el.contentWindow===e.source);if(t&&e.data&&e.data.comet!=null){if(e.data.nt)newTab(String(e.data.comet));else go(t,String(e.data.comet))}else if(t&&e.data&&e.data.cometStore&&t.el.getAttribute('sandbox')===SBX_SAFE)siteMsg(t,e);else if(t&&e.data&&e.data.cometFetch&&t.el.getAttribute('sandbox')===SBX_SAFE)bridgeFetch(e)};
+ const onMsg=e=>{
+  if(!b.isConnected){removeEventListener('message',onMsg);return}
+  const t=T.find(x=>x.el.contentWindow===e.source),d=e.data;if(!t||!d||typeof d!=='object')return;
+  if(d.comet!=null){ // a link: open here, in a new tab, or download it
+   if(d.dl!=null)browserDownload(String(d.comet),String(d.dl));
+   else if(d.nt)newTab(String(d.comet));else go(t,String(d.comet));
+  }else if(d.cometDl){ // the page made a file itself (a blob: or data: download)
+   if(t.el.getAttribute('sandbox')===SBX_SAFE&&d.body instanceof ArrayBuffer)saveDownload(safeName(d.name||'download'),String(d.type||'').split(';')[0],d.body,t.site||hostOf(t.url));
+  }else if(d.cometExt){ // mailto: and tel: links go to the real browser
+   if(/^(mailto|tel):/i.test(String(d.cometExt)))window.open(String(d.cometExt),'_blank');
+  }else if(d.cometCtx){ // right click on a link
+   const u=String(d.cometCtx);if(!/^https?:/i.test(u))return;const r=t.el.getBoundingClientRect();
+   menu({clientX:r.left+(+d.x||0),clientY:r.top+(+d.y||0),preventDefault(){},stopPropagation(){}},[['Open link in new tab',()=>newTab(u)],['Open link in this tab',()=>go(t,u)],['Download link',()=>browserDownload(u,'')],['Copy link address',()=>{try{navigator.clipboard.writeText(u);toast('Link copied')}catch(x){}}]]);
+  }else if(d.cometStore&&t.el.getAttribute('sandbox')===SBX_SAFE)siteMsg(t,e);
+  else if(d.cometFetch&&t.el.getAttribute('sandbox')===SBX_SAFE)bridgeFetch(e);
+ };
  addEventListener('message',onMsg);
  newTab('',file);
 }
@@ -1722,16 +1849,359 @@ async function storeGet(a){
   if(installAmo(text,a.name,true))toast(a.name+' was installed and added to the desktop');
  }catch(e){toast('Couldn’t download that app.')}
 }
-function storeApp(b){
- let q='';
- const draw=()=>{
-  const all=[...STORE_APPS,...storeCat].filter(a=>(a.name+' '+(a.desc||a.description||'')).toLowerCase().includes(q));
-  b.innerHTML=`<div class="fill"><div class="tl"><b style="font-size:16px">App Store</b><input class="qs" placeholder="Search apps" value="${esc(q)}" style="flex:1;min-width:120px"></div><div style="flex:1;overflow:auto;padding:12px;display:flex;flex-wrap:wrap;gap:12px;align-content:flex-start">${all.map((a,i)=>{const have=!!U().fs[APPDIR+'/'+safeName(a.name)+'.amo'];return`<div class="scard"><div style="display:flex;gap:10px;align-items:center"><img src="${a.icon}" width="48" height="48" style="border-radius:11px"><div><b>${esc(a.name)}</b><div style="color:var(--dim);font-size:12px">${esc(a.size||'')}</div></div></div><div style="color:var(--dim);flex:1">${esc(a.desc||a.description||'')}</div><button class="${have?'':'pri'}" data-i="${i}" style="justify-content:center">${have?'Open':'Get'}</button></div>`}).join('')||'<p style="color:var(--dim)">No apps found.</p>'}</div></div>`;
-  const qs=$('.qs',b);qs.oninput=e=>{q=e.target.value.toLowerCase();draw();const n=$('.qs',b);n.focus();n.setSelectionRange(q.length,q.length)};
-  b.onclick=async e=>{const i=e.target.dataset.i;if(i==null)return;const a=all[+i],p=APPDIR+'/'+safeName(a.name)+'.amo';if(U().fs[p])return amoRun(p);e.target.disabled=true;e.target.textContent='Downloading…';await storeGet(a);draw()};
- };
- views.push({b,draw});draw();loadCatalogs().then(()=>{if(b.isConnected)draw()});
+/* ----- App scan: is this app's code like an app that is already in the store? -----
+   1. Every html, js and css file in the package is turned into tokens. Comments are dropped, strings become S, numbers become N and
+      names the author chose (variables, functions) become i, so renaming things or adding comments does not hide a copy.
+   2. Every run of 5 tokens is hashed, and a 128 number "minhash" signature keeps the smallest hash for 128 different mixes.
+   3. Two apps are compared by how many of the 128 numbers match. That is a good estimate of how much of the code they share.
+   The same signature is saved with the app, and the database refuses a new app that matches an old one by half or more. */
+const SCAN_WORDS=new Set('var let const function return if else for while do switch case break continue new this typeof instanceof in of class extends super import export default try catch finally throw async await yield null true false undefined void delete'.split(' '));
+const SCAN_LIMIT=0.5;       // this much shared code (50%) counts as "too similar"
+const SCAN_MIN_TOKENS=150;  // smaller than this is not enough code to compare
+function codeTokens(text){
+ const re=/\/\*[\s\S]*?\*\/|\/\/[^\n]*|"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`|[A-Za-z_$][\w$]*|[0-9][0-9a-zA-Z_.]*|[^\sA-Za-z0-9_$]/g;
+ const out=[];let m;
+ while((m=re.exec(text))&&out.length<300000){
+  const t=m[0],c=t[0];
+  if(c==='/'&&(t[1]==='*'||t[1]==='/'))continue;                 // comment
+  if(c==='"'||c==="'"||c==='`')out.push('S');                    // string
+  else if(c>='0'&&c<='9')out.push('N');                          // number
+  else if(/[A-Za-z_$]/.test(c))out.push(SCAN_WORDS.has(t)?t:'i'); // keyword or a name
+  else out.push(t);                                              // punctuation
+ }
+ return out;
 }
+const tokId=(()=>{const m=new Map;return t=>{let h=m.get(t);if(h===undefined){h=2166136261;for(let i=0;i<t.length;i++){h^=t.charCodeAt(i);h=Math.imul(h,16777619)}m.set(t,h|0)}return m.get(t)}})();
+const MH_SEEDS=(()=>{const a=[];let x=123456789;for(let i=0;i<128;i++){x=(Math.imul(x,1664525)+1013904223)|0;a.push(x)}return a})();
+function minhash(tokens){ // 128 signed 32 bit numbers
+ const mins=new Int32Array(128).fill(0x7fffffff),n=tokens.length;
+ if(n<5)return Array.from(mins);
+ const ids=tokens.map(tokId);
+ for(let i=0;i+5<=n;i++){
+  let h=0;for(let j=0;j<5;j++)h=(Math.imul(h,31)+ids[i+j])|0;
+  for(let k=0;k<128;k++){
+   let x=Math.imul(h^MH_SEEDS[k],0x85ebca6b);x^=x>>>13;x=Math.imul(x,0xc2b2ae35);x^=x>>>16;
+   x|=0;if(x<mins[k])mins[k]=x;
+  }
+ }
+ return Array.from(mins);
+}
+function similarity(a,b){ // 0 to 1: the share of matching signature numbers
+ if(!a||!b||a.length!==128||b.length!==128)return 0;
+ let same=0;for(let i=0;i<128;i++)if(a[i]===b[i])same++;
+ return same/128;
+}
+
+/* ================= App Store =================
+   Tabs: Explore (everything, opens first), Official, Featured, Recent (newest uploads first).
+   Built-in apps (STORE_APPS above) are official. Apps people publish live in Supabase: the file is in Storage (bucket amo-apps)
+   and the details are in the store_apps table. An app that is not Official or Featured is shown as Unverified.
+   Browsing needs no account. Profiles and publishing need a cloud account. */
+const STORE={apps:[],loaded:false,loading:false,err:'',admin:false};
+const kb=n=>n>1048576?(n/1048576).toFixed(1)+' MB':Math.max(1,Math.round(n/1024))+' KB';
+const ago=t=>{const s=Math.max(1,Math.floor((Date.now()-new Date(t))/1000)),u=[[86400,'day'],[3600,'hour'],[60,'minute']];for(const[n,w]of u)if(s>=n){const k=Math.floor(s/n);return k+' '+w+(k>1?'s':'')+' ago'}return 'just now'};
+const GENERIC_ICON=BI('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect width="48" height="48" rx="11" fill="#4b5563"/><rect x="11" y="11" width="26" height="26" rx="6" fill="#9ca3af"/><path d="M19 24h10M24 19v10" stroke="#4b5563" stroke-width="3" stroke-linecap="round"/></svg>');
+const publicBase=()=>CLOUD.url+'/storage/v1/object/public/amo-apps/';
+
+/* Reads the database without needing to be signed in (only the public key) */
+async function sbPublic(path,o={}){
+ const r=await fetch(CLOUD.url+'/rest/v1/'+path,{method:o.method||'GET',headers:{apikey:CLOUD.key,'Content-Type':'application/json'},body:o.body==null?undefined:JSON.stringify(o.body)});
+ if(!r.ok){const e=new Error('rest '+r.status);e.status=r.status;e.body=await r.text().catch(()=>'');throw e}
+ return r.status===204?null:r.json().catch(()=>null);
+}
+async function storeLoad(){
+ if(!cloudReady()){STORE.loaded=true;return}
+ if(STORE.loading)return;STORE.loading=true;STORE.err='';
+ try{
+  const rows=await sbPublic('store_apps?select=id,user_id,name,description,icon,size,official,featured,downloads,created_at,file_path,profiles(username)&order=created_at.desc&limit=500');
+  STORE.apps=(rows||[]).map(r=>({id:'db:'+r.id,dbId:r.id,uid:r.user_id,name:r.name,desc:r.description||'',icon:r.icon||GENERIC_ICON,size:kb(r.size||0),official:!!r.official,featured:!!r.featured,verified:!!(r.official||r.featured),downloads:r.downloads||0,created:r.created_at,path:r.file_path,author:(r.profiles&&r.profiles.username)||'unknown',kind:'db'}));
+ }catch(e){STORE.err=e.status===404||/PGRST20/.test(e.body||'')?'The store database isn’t set up yet. See AmogOs-Cloud-Setup.html.':'Couldn’t reach the store. Showing built-in apps only.'}
+ STORE.loading=false;STORE.loaded=true;
+ if(U()&&U().cloud){try{const r=await sb('admins?select=user_id&limit=1');STORE.admin=!!(r&&r.length)}catch(e){STORE.admin=false}}else STORE.admin=false;
+}
+function storeItems(){
+ const built=STORE_APPS.map(a=>Object.assign({},a,{official:true,featured:true,verified:true,kind:'builtin',author:'Official'}));
+ const cat=storeCat.map(a=>Object.assign({},a,{id:'cat:'+(a.id||a.name),icon:a.icon||GENERIC_ICON,verified:false,official:false,featured:false,kind:'cat'}));
+ return{built,db:STORE.apps,cat};
+}
+function storeList(tab,q){
+ const{built,db,cat}=storeItems();
+ let l=tab==='official'?[...built,...db.filter(a=>a.official)]:tab==='featured'?[...built,...db.filter(a=>a.featured)]:tab==='recent'?db.slice():[...built,...db,...cat];
+ return l.filter(a=>(a.name+' '+(a.desc||a.description||'')+' '+(a.author||'')).toLowerCase().includes(q));
+}
+const installedPath=a=>{const m=U().storeInstalls||{};if(m[a.id]&&isFile(m[a.id]))return m[a.id];const p=APPDIR+'/'+safeName(a.name)+'.amo';return a.verified&&U().fs[p]?p:null};
+const badge=a=>a.official?'<span class="badge ok">Official</span>':a.featured?'<span class="badge ok">Featured</span>':'<span class="badge off">Unverified</span>';
+
+async function fetchAmoText(a){ // the app package as text
+ let text;
+ if(a.html)text=JSON.stringify({amo:1,id:a.id,name:a.name,icon:a.icon,width:a.w,height:a.h,entry:'index.html',files:{'index.html':btoa(unescape(encodeURIComponent(a.html)))}});
+ else{const r=await fetch(a.kind==='db'?publicBase()+a.path:a.url);if(!r.ok)throw new Error('http');text=await r.text()}
+ const o=JSON.parse(text);if(o.amo!==1||!o.files)throw new Error('bad');
+ return text;
+}
+async function storeInstall(a){ // Get / Open
+ const have=installedPath(a);if(have)return amoRun(have);
+ if(!a.verified&&!await ask('<b>'+esc(a.name)+'</b> is <b>unverified</b>. Nobody has reviewed it, so only download it if you trust the person who made it.<br><br>Do you want to download it?',null))return false;
+ let text;try{text=await fetchAmoText(a)}catch(e){toast('Couldn’t download that app.');return false}
+ if(a.kind==='db')sbPublic('rpc/bump_downloads',{method:'POST',body:{app_id:a.dbId}}).catch(()=>{});
+ let p=null;
+ if(a.verified){p=installAmo(text,a.name,true);if(p)toast(a.name+' was installed and added to the desktop')}
+ else{ // unverified: the person decides where the file goes, and nothing is installed or run automatically
+  const pick=await savePlace('Where should <b>'+esc(a.name)+'</b> be saved?','/Downloads',safeName(a.name)+'.amo');
+  if(!pick)return false;
+  p=join(pick.dir,pick.name.replace(/\.amo$/i,'')+'.amo');
+  if(U().fs[p])p=join(pick.dir,pick.name.replace(/\.amo$/i,'')+' (1).amo');
+  if(!put(p,{t:'f',m:'application/x-amo',d:toData(text,'application/x-amo')})){toast('There isn’t enough storage for that app.');return false}
+  refreshAll();toast('Saved to '+p+'. Press Open in the store to run it.');
+ }
+ if(p){(U().storeInstalls=U().storeInstalls||{})[a.id]=p;save()}
+ return !!p;
+}
+
+/* ----- Publishing: read the package, scan it, upload ----- */
+const sha256hex=async t=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t)))].map(x=>x.toString(16).padStart(2,'0')).join('');
+const unb64=s=>{try{return decodeURIComponent(escape(atob(s)))}catch(e){return ''}};
+async function smallIcon(src){ // shrink the app icon to 96 pixels so the store list stays fast
+ if(!src||typeof src!=='string'||!/^data:image[/]/.test(src))return null;
+ return new Promise(ok=>{const i=new Image();i.onload=()=>{try{const c=document.createElement('canvas');c.width=c.height=96;c.getContext('2d').drawImage(i,0,0,96,96);ok(c.toDataURL('image/png'))}catch(e){ok(null)}};i.onerror=()=>ok(null);i.src=src});
+}
+async function scanAmo(text,step){ // step(label,state) reports progress. Returns {ok,reason,...}
+ const fail=reason=>({ok:false,reason});
+ step('Reading the package','run');
+ if(text.length>12*1024*1024)return fail('That file is bigger than 12 MB.');
+ let pkg;try{pkg=JSON.parse(text)}catch(e){return fail('That isn’t an AmogOs app (.amo) file.')}
+ if(!pkg||pkg.amo!==1||!pkg.files||typeof pkg.files!=='object')return fail('That isn’t an AmogOs app (.amo) file.');
+ const entry=pkg.entry||'index.html';
+ if(!pkg.files[entry])return fail('The app has no start page ('+entry+').');
+ step('Reading the package','ok');
+ step('Checking the code','run');
+ let code='';for(const k in pkg.files)if(/[.](html?|js|css)$/i.test(k))code+=unb64(pkg.files[k])+'\n';
+ const toks=codeTokens(code);
+ if(toks.length<SCAN_MIN_TOKENS)return fail('There isn’t enough code in this app to publish it.');
+ const sig=minhash(toks),sha=await sha256hex(text);
+ step('Checking the code','ok');
+ step('Comparing with apps already in the store','run');
+ let rows=[];
+ try{rows=await sbPublic('store_apps?select=name,sha256,minhash&limit=1000')||[]}catch(e){return fail('Couldn’t reach the store to compare. Try again.')}
+ let best={s:0,name:''};
+ for(const r of rows){
+  if(r.sha256===sha)return{ok:false,reason:'This exact app is already in the store ('+r.name+').',similar:{name:r.name,pct:100}};
+  const s=similarity(sig,r.minhash);if(s>best.s)best={s,name:r.name};
+ }
+ if(best.s>=SCAN_LIMIT)return{ok:false,reason:'Too similar to “'+best.name+'” ('+Math.round(best.s*100)+'% of the code matches). Apps need their own code.',similar:{name:best.name,pct:Math.round(best.s*100)}};
+ step('Comparing with apps already in the store','ok');
+ return{ok:true,pkg,sig,sha,text,best:Math.round(best.s*100),compared:rows.length,icon:await smallIcon(pkg.icon)};
+}
+async function publishApp(scan,name,desc,official){
+ await cloudToken();
+ const uid=U().cloud.uid,key=uid+'/'+crypto.randomUUID()+'.amo';
+ const up=await fetch(CLOUD.url+'/storage/v1/object/amo-apps/'+key,{method:'POST',headers:{apikey:CLOUD.key,Authorization:'Bearer '+CSES.at,'Content-Type':'application/octet-stream'},body:scan.text});
+ if(!up.ok)throw Object.assign(new Error('upload'),{status:up.status});
+ try{
+  await sb('store_apps',{method:'POST',prefer:'return=minimal',body:{user_id:uid,name,description:desc,icon:scan.icon,size:scan.text.length,sha256:scan.sha,minhash:scan.sig,file_path:key,official:!!official}});
+ }catch(e){ // the details were refused: take the uploaded file back out
+  fetch(CLOUD.url+'/storage/v1/object/amo-apps/'+key,{method:'DELETE',headers:{apikey:CLOUD.key,Authorization:'Bearer '+CSES.at}}).catch(()=>{});
+  throw e;
+ }
+}
+const publishErr=e=>{
+ const b=e&&e.body||'';
+ if(/too_similar:([^"]*)/.test(b))return 'Too similar to “'+RegExp.$1+'”. Apps need their own code.';
+ if(e&&e.status===409||/23505/.test(b))return 'An app with that name or the same code is already in the store.';
+ if(/violates check|23514/.test(b))return 'The name (2 to 40 characters) or description (up to 300) is too long or too short.';
+ return cloudErr(e);
+};
+
+/* ----- Profiles: a public page with a username, a short bio and the saved data of apps you choose to show ----- */
+const amoPrefix=id=>'amo:'+me+':'+id+':';
+function amoData(p){ // the localStorage values one installed app has saved (apps keep theirs under their own prefix, see amoShim)
+ const m=amoMeta(p)||{},pre=amoPrefix(m.id||m.name||base(p)),o={};let n=0;
+ try{for(let i=0;i<localStorage.length&&n<40;i++){const k=localStorage.key(i);if(k&&k.indexOf(pre)===0){o[k.slice(pre.length)]=String(localStorage.getItem(k)).slice(0,500);n++}}}catch(e){}
+ return o;
+}
+const installedAmos=()=>{const s=new Set(Object.keys(U().fs).filter(p=>parent(p)===APPDIR&&isAmo(p)));Object.values(U().storeInstalls||{}).forEach(p=>{if(isAmo(p))s.add(p)});return[...s]};
+const appTitle=p=>(amoMeta(p)||{}).name||base(p).replace(/[.]amo$/i,'');
+const dataTable=o=>Object.keys(o||{}).length?'<table style="width:100%;border-collapse:collapse;font-size:12px">'+Object.keys(o).map(k=>`<tr><td style="padding:2px 8px 2px 0;color:var(--dim);vertical-align:top;white-space:nowrap">${esc(k)}</td><td style="word-break:break-all">${esc(String(o[k]).slice(0,300))}</td></tr>`).join('')+'</table>':'<span style="color:var(--dim)">Nothing saved yet.</span>';
+
+function storeApp(b,arg){
+ let q='',tab='explore',view={t:'tab'},list=[];
+ const body=()=>$('.sbody',b);
+ const header=()=>{
+  b.innerHTML=`<div class="fill"><div class="tl"><b style="font-size:16px">App Store</b><input class="qs" placeholder="Search apps" value="${esc(q)}" style="flex:1;min-width:100px">${U().cloud?'<button data-go="me">Profile</button><button class="pri" data-go="pub">Publish app</button>':'<button data-go="signin">Sign in</button>'}</div>
+   <div class="stabs">${[['explore','Explore'],['official','Official'],['featured','Featured'],['recent','Recent']].map(([k,n])=>`<button data-tab="${k}" class="${view.t==='tab'&&tab===k?'on':''}">${n}</button>`).join('')}</div>
+   <div class="sbody" style="flex:1;overflow:auto;padding:12px"></div></div>`;
+  const qs=$('.qs',b);qs.oninput=()=>{q=qs.value.toLowerCase();if(view.t!=='tab')view={t:'tab'};render()};
+ };
+ const card=(a,i)=>{
+  const have=installedPath(a);
+  return`<div class="scard" data-open="${i}" style="cursor:pointer"><div style="display:flex;gap:10px;align-items:center"><img src="${a.icon}" width="48" height="48" style="border-radius:11px;object-fit:cover"><div style="min-width:0"><b>${esc(a.name)}</b><div style="color:var(--dim);font-size:12px">${a.kind==='db'?'by '+esc(a.author)+' · ':''}${esc(a.size||'')}${tab==='recent'&&a.created?' · '+ago(a.created):''}</div></div></div><div>${badge(a)}</div><div style="color:var(--dim);flex:1;font-size:13px">${esc((a.desc||a.description||'').slice(0,110))}</div><button class="${have?'':'pri'}" data-get="${i}" style="justify-content:center">${have?'Open':'Get'}</button></div>`;
+ };
+ const listHtml=()=>{
+  list=storeList(tab,q);
+  const note=STORE.err?`<p style="color:#fbbf24;width:100%;margin:0">${esc(STORE.err)}</p>`:!STORE.loaded?'<p style="color:var(--dim);width:100%;margin:0">Loading…</p>':'';
+  const head=tab==='recent'?'<p style="width:100%;margin:0;color:var(--dim)">The newest uploads from people in the community.</p>':'';
+  return`<div style="display:flex;flex-wrap:wrap;gap:12px;align-content:flex-start">${head}${note}${list.map(card).join('')||(STORE.loaded&&!STORE.err?'<p style="color:var(--dim)">No apps found here yet.</p>':'')}</div>`;
+ };
+ const detailHtml=a=>{
+  const have=installedPath(a),mine=U().cloud&&a.uid===U().cloud.uid;
+  return`<button data-back>‹ Back</button>
+  <div style="display:flex;gap:16px;margin-top:12px;align-items:center"><img src="${a.icon}" width="96" height="96" style="border-radius:20px;object-fit:cover"><div><h2 style="margin:0">${esc(a.name)}</h2>${a.kind==='db'?`<div style="color:var(--dim)">by <a href="#" data-user="${esc(a.uid)}">${esc(a.author)}</a></div>`:''}<div style="margin-top:6px">${badge(a)}</div></div></div>
+  ${a.verified?'':'<p style="color:#fbbf24;margin-bottom:0"><b>Unverified.</b> This app has not been reviewed. Only download it if you trust the person who made it.</p>'}
+  <p>${esc(a.desc||a.description||'No description.')}</p>
+  <div style="color:var(--dim);margin-bottom:12px">Size ${esc(a.size||'')}${a.kind==='db'?' · '+a.downloads+' download'+(a.downloads===1?'':'s')+' · Uploaded '+ago(a.created):''}</div>
+  <button class="${have?'':'pri'}" data-get="d">${have?'Open':'Get'}</button>
+  ${a.kind==='db'&&(STORE.admin||mine)?`<div style="margin-top:18px;padding-top:12px;border-top:1px solid var(--bd)">${STORE.admin?`<button data-adm="feat">${a.featured?'Remove from Featured':'Add to Featured'}</button> <button data-adm="off">${a.official?'Remove Official':'Make Official'}</button> `:''}<button data-adm="del">Delete app</button></div>`:''}`;
+ };
+ let cur=null; // the app on the details page
+ async function render(){
+  const el=body();if(!el)return;
+  if(view.t==='tab')el.innerHTML=listHtml();
+  else if(view.t==='app')el.innerHTML=detailHtml(cur);
+  else if(view.t==='signin'){
+   el.innerHTML='<h3 style="margin-top:0">Sign in to the store</h3><p style="color:var(--dim)">Sign in to get a public profile and publish apps.</p><div id="cauth" style="max-width:420px"></div>';
+   cloudAuth($('#cauth',el),({email})=>{if(!U().cloud){U().cloud={uid:CSES.uid,email,rt:CSES.rt,map:{}};ensureCloudRoot();save();cloudStart()}view={t:'tab'};header();storeLoad().then(render);render();toast('Signed in')},()=>{view={t:'tab'};header();render()});
+  }
+  else if(view.t==='me')myProfile(el);
+  else if(view.t==='user')userProfile(el,view.uid);
+  else if(view.t==='pub')publishView(el);
+  $$('[data-tab]').forEach(x=>x.classList.toggle('on',view.t==='tab'&&x.dataset.tab===tab));
+ };
+ const $$=s=>b.querySelectorAll(s);
+ const go=v=>{view=v;render()};
+
+ /* my profile: make a username once, then choose which apps show their saved data */
+ async function myProfile(el){
+  if(!U().cloud)return go({t:'signin'});
+  el.innerHTML='<p style="color:var(--dim)">Loading your profile…</p>';
+  let p=null;
+  try{const r=await sb('profiles?select=*&user_id=eq.'+U().cloud.uid);p=r&&r[0]}catch(e){return el.innerHTML='<p style="color:#f87171">'+esc(cloudErr(e))+'</p>'}
+  if(!p){
+   el.innerHTML=`<h3 style="margin-top:0">Make your profile</h3><p style="color:var(--dim)">Pick a public username (3 to 20 letters, numbers or underscores). Your email stays private.</p><input id="pu" maxlength="20" placeholder="username" style="width:100%;max-width:320px"><p id="pm" style="color:#f87171;min-height:20px"></p><button class="pri" id="pc">Create profile</button>`;
+   $('#pc',el).onclick=async()=>{
+    const u=$('#pu',el).value.trim().toLowerCase(),m=$('#pm',el);
+    if(!/^[a-z0-9_]{3,20}$/.test(u))return m.textContent='Use 3 to 20 letters, numbers or underscores.';
+    m.style.color='var(--dim)';m.textContent='Creating…';
+    try{await sb('profiles',{method:'POST',prefer:'return=minimal',body:{user_id:U().cloud.uid,username:u}});myProfile(el)}
+    catch(e){m.style.color='#f87171';m.textContent=e.status===409?'That username is taken.':cloudErr(e)}
+   };
+   return;
+  }
+  const shown=p.app_data||{},apps=installedAmos(),mine=STORE.apps.filter(a=>a.uid===U().cloud.uid);
+  el.innerHTML=`<h3 style="margin:0">${esc(p.username)}</h3><p style="color:var(--dim);margin-top:2px">Your public profile. Anyone can see everything on this page.</p>
+   <label style="color:var(--dim);font-size:12px">About you</label><textarea id="pb" maxlength="160" rows="2" style="width:100%;margin:4px 0 12px">${esc(p.bio||'')}</textarea>
+   <b>Show saved app data</b><p style="color:var(--dim);margin:2px 0 8px;font-size:12px">These are the localStorage values your installed apps saved (like scores). Only the apps you tick are shown.</p>
+   ${apps.map((ap,i)=>{const n=appTitle(ap),d=amoData(ap);return`<div style="border:1px solid var(--bd);border-radius:8px;padding:8px;margin-bottom:8px"><label><input type="checkbox" data-ap="${i}" ${n in shown?'checked':''}> <b>${esc(n)}</b> <span style="color:var(--dim)">(${Object.keys(d).length} saved value${Object.keys(d).length===1?'':'s'})</span></label><div style="margin-top:6px">${dataTable(d)}</div></div>`}).join('')||'<p style="color:var(--dim)">You haven’t installed any apps yet.</p>'}
+   <p id="pm" style="min-height:20px;color:var(--dim)"></p><button class="pri" id="ps">Save profile</button> <button id="pv">View as others see it</button>
+   <h4 style="margin-bottom:6px">Your published apps</h4>${mine.map(a=>`<div style="padding:4px 0"><a href="#" data-pa="${esc(a.id)}">${esc(a.name)}</a> ${badge(a)}</div>`).join('')||'<p style="color:var(--dim);margin:0">Nothing published yet. Press Publish app.</p>'}`;
+  $('#ps',el).onclick=async()=>{
+   const out={};el.querySelectorAll('[data-ap]').forEach(c=>{if(c.checked){const ap=apps[+c.dataset.ap];out[appTitle(ap)]=amoData(ap)}});
+   const m=$('#pm',el);m.textContent='Saving…';
+   try{await sb('profiles?user_id=eq.'+U().cloud.uid,{method:'PATCH',prefer:'return=minimal',body:{bio:$('#pb',el).value.slice(0,160),app_data:out,updated_at:new Date().toISOString()}});m.textContent='Saved.'}
+   catch(e){m.style.color='#f87171';m.textContent=cloudErr(e)}
+  };
+  $('#pv',el).onclick=()=>go({t:'user',uid:U().cloud.uid});
+ }
+ async function userProfile(el,uid){
+  el.innerHTML='<button data-back>‹ Back</button><p style="color:var(--dim)">Loading…</p>';
+  let p=null;try{const r=await sbPublic('profiles?select=username,bio,app_data,created_at&user_id=eq.'+encodeURIComponent(uid));p=r&&r[0]}catch(e){}
+  if(!p)return el.innerHTML='<button data-back>‹ Back</button><p style="color:var(--dim)">That profile couldn’t be found.</p>';
+  const apps=STORE.apps.filter(a=>a.uid===uid),data=p.app_data||{};
+  el.innerHTML=`<button data-back>‹ Back</button><h3 style="margin:10px 0 0">${esc(p.username)}</h3><p style="color:var(--dim);margin-top:2px">Joined ${esc(new Date(p.created_at).toLocaleDateString())}</p><p>${esc(p.bio||'')}</p>
+   <h4 style="margin-bottom:6px">Apps</h4>${apps.map(a=>`<div style="padding:4px 0"><a href="#" data-pa="${esc(a.id)}">${esc(a.name)}</a> ${badge(a)}</div>`).join('')||'<p style="color:var(--dim);margin:0">No published apps.</p>'}
+   <h4 style="margin-bottom:6px">Saved app data</h4>${Object.keys(data).map(n=>`<div style="border:1px solid var(--bd);border-radius:8px;padding:8px;margin-bottom:8px"><b>${esc(n)}</b><div style="margin-top:6px">${dataTable(data[n])}</div></div>`).join('')||'<p style="color:var(--dim);margin:0">Nothing shared.</p>'}`;
+ }
+
+ /* publish: pick a file, scan it, add a name and a description, upload */
+ async function publishView(el){
+  if(!U().cloud)return go({t:'signin'});
+  el.innerHTML='<p style="color:var(--dim)">Checking your profile…</p>';
+  try{const r=await sb('profiles?select=username&user_id=eq.'+U().cloud.uid);if(!(r&&r[0])){el.innerHTML='<p>You need a public profile before you can publish.</p><button class="pri" data-go="me">Make my profile</button>';return}}
+  catch(e){return el.innerHTML='<p style="color:#f87171">'+esc(cloudErr(e))+'</p>'}
+  const mine=Object.keys(U().fs).filter(isAmo);
+  el.innerHTML=`<h3 style="margin-top:0">Publish an app</h3><p style="color:var(--dim)">Upload an .amo file. We check that it works and that its code isn’t like an app that’s already in the store. Published apps show as Unverified until they are featured.</p>
+   <input type="file" id="pf" accept=".amo,application/json">
+   ${mine.length?`<p style="margin:10px 0 4px;color:var(--dim)">or pick one from this PC</p><select id="pp" style="max-width:320px"><option value="">Choose…</option>${mine.map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join('')}</select>`:''}
+   <div id="ps" style="margin:14px 0"></div><div id="pform"></div>`;
+  const steps={};const stEl=$('#ps',el);
+  const step=(l,s)=>{steps[l]=s;stEl.innerHTML=Object.keys(steps).map(k=>`<div style="color:${steps[k]==='ok'?'#4ade80':steps[k]==='bad'?'#f87171':'var(--dim)'}">${steps[k]==='ok'?'✓':steps[k]==='bad'?'✗':'…'} ${esc(k)}</div>`).join('')};
+  let seq=0;
+  const start=async text=>{
+   const my=++seq;Object.keys(steps).forEach(k=>delete steps[k]);$('#pform',el).innerHTML='';
+   const r=await scanAmo(text,step);if(my!==seq)return;
+   if(!r.ok){stEl.insertAdjacentHTML('beforeend',`<p style="color:#f87171;margin:8px 0 0"><b>Not accepted.</b> ${esc(r.reason)}</p>`);return}
+   stEl.insertAdjacentHTML('beforeend',`<p style="color:#4ade80;margin:8px 0 0"><b>Passed.</b> Compared with ${r.compared} app${r.compared===1?'':'s'}. The closest match was ${r.best}%.</p>`);
+   $('#pform',el).innerHTML=`<label style="color:var(--dim);font-size:12px">Name</label><input id="pn" maxlength="40" value="${esc(String(r.pkg.name||'').slice(0,40))}" style="width:100%;margin:4px 0 10px"><label style="color:var(--dim);font-size:12px">Description</label><textarea id="pd" maxlength="300" rows="3" style="width:100%;margin:4px 0 10px"></textarea>${STORE.admin?'<label style="display:block;margin-bottom:10px"><input type="checkbox" id="po"> Publish as Official</label>':''}<p id="pe" style="color:#f87171;min-height:20px"></p><button class="pri" id="pg">Publish</button>`;
+   $('#pg',el).onclick=async()=>{
+    const nm=$('#pn',el).value.trim(),pe=$('#pe',el),btn=$('#pg',el);
+    if(nm.length<2)return pe.textContent='Give the app a name (at least 2 characters).';
+    if(STORE_APPS.some(a=>a.name.toLowerCase()===nm.toLowerCase()))return pe.textContent='That name belongs to an official app. Choose another.';
+    btn.disabled=true;pe.style.color='var(--dim)';pe.textContent='Publishing…';
+    try{await publishApp(r,nm,$('#pd',el).value.trim(),STORE.admin&&$('#po',el)&&$('#po',el).checked);STORE.loaded=false;await storeLoad();tab='recent';view={t:'tab'};header();render();toast('Your app is published. It shows as Unverified until it is featured.')}
+    catch(e){btn.disabled=false;pe.style.color='#f87171';pe.textContent=publishErr(e)}
+   };
+  };
+  $('#pf',el).onchange=async e=>{const f=e.target.files[0];if(f)start(await f.text())};
+  const pp=$('#pp',el);if(pp)pp.onchange=()=>{if(pp.value)start(textOf(U().fs[pp.value].d))};
+ }
+
+ b.onclick=async e=>{
+  const t=e.target;
+  const get=t.closest('[data-get]');
+  if(get){e.stopPropagation();const a=get.dataset.get==='d'?cur:list[+get.dataset.get];if(!a)return;get.disabled=true;if(!installedPath(a))get.textContent='Working…';await storeInstall(a);if(b.isConnected)render();return}
+  const adm=t.closest('[data-adm]');
+  if(adm&&cur&&cur.kind==='db'){
+   const k=adm.dataset.adm;
+   try{
+    if(k==='del'){if(!await ask('Delete “'+esc(cur.name)+'” from the store?',null))return;await sb('store_apps?id=eq.'+cur.dbId,{method:'DELETE',prefer:'return=minimal'});fetch(CLOUD.url+'/storage/v1/object/amo-apps/'+cur.path,{method:'DELETE',headers:{apikey:CLOUD.key,Authorization:'Bearer '+CSES.at}}).catch(()=>{});view={t:'tab'}}
+    else await sb('store_apps?id=eq.'+cur.dbId,{method:'PATCH',prefer:'return=minimal',body:k==='feat'?{featured:!cur.featured}:{official:!cur.official}});
+    await storeLoad();if(view.t==='app')cur=STORE.apps.find(a=>a.dbId===cur.dbId)||cur;render();
+   }catch(err){toast(cloudErr(err))}
+   return;
+  }
+  const g=t.closest('[data-go]');if(g)return go({t:g.dataset.go});
+  const tb=t.closest('[data-tab]');if(tb){tab=tb.dataset.tab;view={t:'tab'};return render()}
+  if(t.closest('[data-back]')){view={t:'tab'};return render()}
+  const us=t.closest('[data-user]');if(us){e.preventDefault();return go({t:'user',uid:us.dataset.user})}
+  const pa=t.closest('[data-pa]');if(pa){e.preventDefault();const a=STORE.apps.find(x=>x.id===pa.dataset.pa);if(a){cur=a;return go({t:'app'})}}
+  const op=t.closest('[data-open]');if(op){cur=list[+op.dataset.open];if(cur)go({t:'app'})}
+ };
+ views.push({b,draw:()=>{if(view.t==='tab'||view.t==='app')render()}});
+ header();render();
+ storeLoad().then(()=>{if(b.isConnected){header();render()}});
+ loadCatalogs().then(()=>{if(b.isConnected&&view.t==='tab')render()});
+}
+
+/* ----- Each app gets its own localStorage -----
+   Apps run in frames that share the OS page's storage. This script (put at the top of every app page) keeps an app's values
+   under "amo:<account>:<app>:" so they can be shown on a profile. Reading a key the app saved before this existed
+   copies it across, so old saves keep working. */
+function amoShim(html,prefix){
+ const code='('+function(P){
+  try{
+   var R=window.localStorage;
+   var names=function(){var o=[];for(var i=0;i<R.length;i++){var k=R.key(i);if(k&&k.indexOf(P)===0)o.push(k.slice(P.length))}return o};
+   var api={
+    getItem:function(k){k=String(k);var v=R.getItem(P+k);if(v===null&&k.indexOf('amogos')!==0&&k.indexOf('amo:')!==0){var old=R.getItem(k);if(old!==null){R.setItem(P+k,old);return old}}return v},
+    setItem:function(k,v){R.setItem(P+String(k),String(v))},
+    removeItem:function(k){R.removeItem(P+String(k))},
+    clear:function(){names().forEach(function(k){R.removeItem(P+k)})},
+    key:function(i){var n=names();return i<n.length?n[i]:null}
+   };
+   var box=new Proxy(api,{
+    get:function(t,k){if(k==='length')return names().length;if(typeof k==='string'&&!(k in t)){var v=api.getItem(k);return v===null?undefined:v}return t[k]},
+    set:function(t,k,v){api.setItem(k,v);return true},
+    deleteProperty:function(t,k){api.removeItem(k);return true},
+    has:function(t,k){return k in t||names().indexOf(k)>-1},
+    ownKeys:function(){return names()},
+    getOwnPropertyDescriptor:function(t,k){if(typeof k==='string'&&names().indexOf(k)>-1)return{value:api.getItem(k),writable:true,enumerable:true,configurable:true};return undefined}
+   });
+   Object.defineProperty(window,'localStorage',{value:box,configurable:true});
+  }catch(e){}
+ }+')('+JSON.stringify(prefix)+')';
+ const tag='<script>'+code+'<'+'/script>';
+ return /<head[^>]*>/i.test(html)?html.replace(/<head[^>]*>/i,m=>m+tag):tag+html;
+}
+
 /* ================= Music player =================
    Plays audio files from this PC (a Music folder is made for you) plus three songs the OS makes by itself.
    A song file is saved like any other file: path -> {t:'f', m:'audio/...', d: data URL}.
@@ -2041,6 +2511,166 @@ function settingsApp(b,tab){
 /* Picking a picture file: saves it to Pictures and uses it as the background */
 $('#wpf').onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f)return;const r=new FileReader();r.onload=()=>{const p='/Pictures/'+f.name;if(put(p,{t:'f',m:f.type||'image/png',d:r.result})){setWall(p);refreshAll();document.querySelectorAll('.pg').forEach(g=>g.closest('.bd')&&g.closest('.bd')._show&&g.closest('.bd')._show('Personalization'))}};r.readAsDataURL(f)};
 
+/* ================= Terminal =================
+   A command line for the AmogOs file system. Type "help" to see the commands.
+   Output is added with textContent, so nothing typed or stored in a file can run as code. */
+function terminalApp(b,start){
+ b.innerHTML=`<div class="fill" style="background:#0c0c0c;color:#d4d4d4;font:13px/1.45 Consolas,Menlo,monospace;display:flex;flex-direction:column;cursor:text">
+  <div class="tout" style="flex:1;overflow:auto;padding:10px 10px 0;white-space:pre-wrap;word-break:break-word"></div>
+  <div style="display:flex;align-items:center;gap:6px;padding:4px 10px 10px"><span class="tp" style="color:#4ade80;white-space:nowrap"></span><input class="tin" spellcheck="false" autocomplete="off" autocapitalize="off" style="flex:1;min-width:0;background:none;border:0;box-shadow:none;outline:0;color:inherit;font:inherit;padding:0"></div></div>`;
+ const outEl=$('.tout',b),inp=$('.tin',b),pr=$('.tp',b);
+ let cwd=start&&U().fs[start]&&U().fs[start].t==='d'?start:'/',hist=[],hi=0;
+ const out=(t,c)=>{const d=document.createElement('div');d.textContent=t;if(c)d.style.color=c;outEl.appendChild(d);outEl.scrollTop=outEl.scrollHeight};
+ const err=t=>out(t,'#f87171');
+ const prompt=()=>{pr.textContent=me.split('@')[0]+'@'+S().device+' '+(cwd==='/'?'~':cwd)+' $'};
+ /* turn a typed path into a clean absolute one ("~" is the top of the drive) */
+ const res=p=>{
+  p=p||'.';if(p==='~')p='/';else if(p.indexOf('~/')===0)p=p.slice(1);
+  const parts=(p[0]==='/'?[]:cwd.split('/').filter(Boolean));
+  p.split('/').forEach(x=>{if(!x||x==='.')return;if(x==='..')parts.pop();else parts.push(x)});
+  return '/'+parts.join('/');
+ };
+ const fs=()=>U().fs;
+ const kids=d=>Object.keys(fs()).filter(k=>k!==d&&parent(k)===d).sort();
+ const isDir=p=>p==='/'||(fs()[p]&&fs()[p].t==='d');
+ const exists=p=>p==='/'||!!fs()[p];
+ const isText=r=>r&&r.t==='f'&&(!r.m||/^text|json|javascript|xml/.test(r.m));
+ const guard=p=>{if(p===CLOUD_DIR){err('The Cloud folder can’t be changed this way.');return true}return false};
+ /* split a line into words, keeping "quoted text" together */
+ const tok=line=>{const o=[];let cur='',q='',has=false;
+  for(const ch of line){
+   if(q){if(ch===q)q='';else cur+=ch}
+   else if(ch==='"'||ch==="'"){q=ch;has=true}
+   else if(ch===' '){if(cur||has)o.push(cur);cur='';has=false}
+   else cur+=ch;
+  }
+  if(cur||has)o.push(cur);return o;
+ };
+ const copyTree=(from,to,del)=>{ // copy (or move) a file or a whole folder
+  const f=fs(),moved=[];
+  Object.keys(f).forEach(k=>{if(k===from||k.indexOf(from+'/')===0)moved.push(k)});
+  moved.forEach(k=>{const n=to+k.slice(from.length);f[n]=Object.assign({},f[k])});
+  if(del)moved.forEach(k=>delete f[k]);
+  for(let d=parent(to);d!=='/'&&!f[d];d=parent(d))f[d]={t:'d'};
+ };
+ const cmds={
+  help(){out('Commands:\n  ls [-l] [path]    list files          cd [path]       change folder\n  pwd               where you are       cat <file>      show a file\n  echo text [> file | >> file]          write text\n  mkdir <name>      make a folder       touch <file>    make an empty file\n  rm <path>         move to the Trash   mv <from> <to>  move or rename\n  cp <from> <to>    copy                edit <file>     open in Notes\n  open <file|app>   open something      apps            list apps\n  cloud [sync]      The Cloud status    whoami, date, uname, neofetch\n  history, clear, exit','#9ca3af')},
+  clear(){outEl.textContent=''},
+  pwd(){out(cwd)},
+  whoami(){out(me)},
+  date(){out(new Date().toString())},
+  uname(){out('AmogOs '+OS_VERSION)},
+  ver(){out('AmogOs '+OS_VERSION)},
+  hostname(){out(S().device)},
+  history(){hist.forEach((h,i)=>out((i+1)+'  '+h))},
+  exit(){const w=b.closest('.win'),x=w&&$('.x',w);if(x)x.click()},
+  ls(a){
+   const long=a.includes('-l'),p=res(a.filter(x=>x[0]!=='-')[0]);
+   if(!exists(p))return err('ls: no such file or folder: '+p);
+   if(!isDir(p))return out(base(p));
+   const l=kids(p);if(!l.length)return out('(empty)','#9ca3af');
+   if(long)l.forEach(k=>{const r=fs()[k];out((r.t==='d'?'d ':'- ')+String(r.t==='d'?'':Math.round((r.d||'').length*0.75/1024*10)/10+' KB').padStart(10)+'  '+base(k)+(r.t==='d'?'/':''),r.t==='d'?'#60a5fa':null)});
+   else l.forEach(k=>out(base(k)+(fs()[k].t==='d'?'/':''),fs()[k].t==='d'?'#60a5fa':null));
+  },
+  cd(a){const p=res(a[0]||'~');if(!exists(p))return err('cd: no such folder: '+p);if(!isDir(p))return err('cd: not a folder: '+p);cwd=p},
+  cat(a){
+   if(!a[0])return err('cat: which file?');
+   a.forEach(x=>{const p=res(x),r=fs()[p];
+    if(!r)return err('cat: no such file: '+p);
+    if(r.t==='d')return err('cat: '+p+' is a folder');
+    if(!isText(r))return err('cat: '+base(p)+' is not a text file (use "open")');
+    out(fromData(r.d));
+   });
+  },
+  mkdir(a){
+   const n=a.filter(x=>x[0]!=='-');if(!n.length)return err('mkdir: name the folder');
+   n.forEach(x=>{const p=res(x);if(exists(p))return err('mkdir: already exists: '+p);if(guard(p))return;put(p,{t:'d'})});refreshAll();
+  },
+  touch(a){
+   if(!a[0])return err('touch: name the file');
+   a.forEach(x=>{const p=res(x);if(exists(p))return;put(p,{t:'f',m:/\.html?$/i.test(p)?'text/html':'text/plain',d:toData('')})});refreshAll();
+  },
+  echo(a){
+   let i=a.findIndex(x=>x==='>'||x==='>>');
+   if(i<0)return out(a.join(' '));
+   const add=a[i]==='>>',p=res(a[i+1]),text=a.slice(0,i).join(' ');
+   if(!a[i+1])return err('echo: where should I write it?');
+   if(isDir(p))return err('echo: '+p+' is a folder');
+   const old=fs()[p],prev=add&&isText(old)?fromData(old.d)+'\n':'';
+   if(put(p,{t:'f',m:/\.html?$/i.test(p)?'text/html':'text/plain',d:toData(prev+text)}))refreshAll();else err('echo: not enough storage');
+  },
+  rm(a){
+   const n=a.filter(x=>x[0]!=='-');if(!n.length)return err('rm: what should I remove?');
+   n.forEach(x=>{const p=res(x);if(!exists(p)||p==='/')return err('rm: no such file or folder: '+x);if(guard(p))return;toTrash(p);if(cwd===p||cwd.indexOf(p+'/')===0)cwd=parent(p)});
+  },
+  mv(a){
+   if(a.length<2)return err('mv: usage: mv <from> <to>');
+   const f=res(a[0]);let t=res(a[1]);
+   if(!exists(f))return err('mv: no such file or folder: '+f);
+   if(guard(f)||guard(t))return;
+   if(isDir(t))t=join(t,base(f));
+   if(exists(t))return err('mv: already exists: '+t);
+   if(t===f||t.indexOf(f+'/')===0)return err('mv: can’t move a folder into itself');
+   copyTree(f,t,true);save();refreshAll();
+  },
+  cp(a){
+   if(a.length<2)return err('cp: usage: cp <from> <to>');
+   const f=res(a[0]);let t=res(a[1]);
+   if(!exists(f))return err('cp: no such file or folder: '+f);
+   if(guard(t))return;
+   if(isDir(t))t=join(t,base(f));
+   if(exists(t))return err('cp: already exists: '+t);
+   if(t.indexOf(f+'/')===0)return err('cp: can’t copy a folder into itself');
+   copyTree(f,t,false);if(!save()){Object.keys(fs()).forEach(k=>{if(k===t||k.indexOf(t+'/')===0)delete fs()[k]});return err('cp: not enough storage')}refreshAll();
+  },
+  edit(a){if(!a[0])return err('edit: which file?');const p=res(a[0]);if(isDir(p))return err('edit: '+p+' is a folder');openApp('Notes',p)},
+  open(a){
+   if(!a[0]){openApp('Files',cwd);return}
+   const p=res(a.join(' ')),app=APPS.find(x=>x.n.toLowerCase()===a.join(' ').toLowerCase());
+   if(exists(p)&&p!=='/'){if(isDir(p))openApp('Files',p);else openFile(p)}
+   else if(app)openApp(app.n);
+   else err('open: no file or app called “'+a.join(' ')+'”');
+  },
+  apps(){APPS.filter(x=>!x.hide).forEach(x=>out(x.n))},
+  cloud(a){
+   if(!U().cloud)return err('You are not signed in to the cloud. Sign in in Settings > Backup.');
+   if(a[0]==='sync'){out('Syncing…');cloudSync(true).then(()=>out('The Cloud: '+cloudStatus()));return}
+   out('Signed in as '+U().cloud.email);out('The Cloud: '+cloudStatus());
+  },
+  neofetch(){
+   const f=fs(),n=Object.keys(f),files=n.filter(k=>f[k].t==='f').length;
+   out(['      ___       '+me,'     /   \\      OS: AmogOs '+OS_VERSION,'    | o o |     Device: '+S().device,'    |_____|     Files: '+files+'  Folders: '+(n.length-files),'                Cloud: '+(U().cloud?cloudStatus():'not signed in')].join('\n'),'#4cc2ff');
+  }
+ };
+ const run=line=>{
+  out(pr.textContent+' '+line,'#9ca3af');
+  const a=tok(line.trim());if(!a.length)return;
+  const c=a.shift().toLowerCase();
+  if(cmds[c]&&Object.prototype.hasOwnProperty.call(cmds,c)){try{cmds[c](a)}catch(e){err(c+': something went wrong')}}
+  else err(c+': command not found. Type "help" for the list.');
+ };
+ /* Tab: finish the command name or a file name */
+ const complete=()=>{
+  const v=inp.value,sp=v.lastIndexOf(' '),word=v.slice(sp+1);
+  let opts;
+  if(sp<0)opts=Object.keys(cmds).filter(c=>c.indexOf(word.toLowerCase())===0);
+  else{const slash=word.lastIndexOf('/'),dirPart=slash<0?'':word.slice(0,slash+1),d=res(dirPart||'.'),pre=word.slice(slash+1);
+   opts=kids(d).filter(k=>base(k).toLowerCase().indexOf(pre.toLowerCase())===0).map(k=>dirPart+base(k)+(fs()[k].t==='d'?'/':''))}
+  if(opts.length===1)inp.value=v.slice(0,sp+1)+opts[0]+(sp<0?' ':'');
+  else if(opts.length>1)out(opts.map(o=>o.split('/').filter(Boolean).pop()||o).join('   '),'#9ca3af');
+ };
+ inp.onkeydown=e=>{
+  if(e.key==='Enter'){const l=inp.value;inp.value='';if(l.trim()){hist.push(l);hi=hist.length}run(l);prompt()}
+  else if(e.key==='ArrowUp'){e.preventDefault();if(hi>0)inp.value=hist[--hi]}
+  else if(e.key==='ArrowDown'){e.preventDefault();hi=Math.min(hi+1,hist.length);inp.value=hist[hi]||''}
+  else if(e.key==='Tab'){e.preventDefault();complete()}
+  else if(e.key==='l'&&e.ctrlKey){e.preventDefault();cmds.clear()}
+ };
+ b.onclick=e=>{if(!getSelection().toString())inp.focus()};
+ out('AmogOs Terminal '+OS_VERSION+'. Type "help" to see what you can do.','#4cc2ff');
+ prompt();inp.focus();
+}
+
 const APPS=[
  {n:'Files',i:'folder',r:(b,a)=>filesApp(b,a),w:640,h:380},
  {n:'Notes',i:'notes',r:(b,a)=>notesApp(b,a),w:520,h:360},
@@ -2049,6 +2679,7 @@ const APPS=[
  {n:'Store',i:'store',r:(b)=>storeApp(b),w:760,h:520},
  {n:'Music',i:'music',r:(b,a)=>musicApp(b,a),w:720,h:460},
  {n:'Calculator',i:'calc',r:(b)=>calcApp(b),w:300,h:400},
+ {n:'Terminal',i:'term',r:(b,a)=>terminalApp(b,a),w:640,h:400},
  {n:'Trash',i:'trash',hide:true,r:(b)=>trashApp(b),w:540,h:380},
  {n:'Settings',i:'gear',r:(b,a)=>settingsApp(b,a),w:780,h:500}
 ];
@@ -2223,13 +2854,14 @@ function lockScreen(sel,auto){const bl=DB.users[sel].blank;if(auto&&bl){me=sel;r
    The account is an AmogOs cloud account (email + password). The local record is made at the end. */
 function oobe(step,canBack){
  const L=$('#login');L.style.display='block';L.onclick=null;
- const S=oobe.S=oobe.S||{email:'',pw:'',key:''};
+ const S=oobe.S=oobe.S||{email:'',pw:'',key:'',name:'',local:false}; // local = skipped the account
  const nav=`<div class="nav"><button id="bk">Back</button><button class="pri" id="nx">Next</button></div>`;
  const pages={
   0:`<h1>Let’s set up your device</h1><p>It only takes a minute. You’ll sign in with your AmogOs account (or make one), then pick your storage plan.</p><div class="nav"><span>${canBack?'<a href="#" id="cb">Back to sign in</a>':''}</span><button class="pri" id="nx">Get started</button></div>`,
-  signin:`<h1>Sign in to your account</h1><div id="cauth"></div>`,
+  signin:`<h1>Sign in to your account</h1><div id="cauth"></div><p style="margin-top:14px"><a href="#" id="skipacc">Skip, use this PC without an account</a></p>`,
+  local:`<h1>Who’s using this PC?</h1><p>Pick a name. A password is optional. You can sign in to a cloud account later in Settings.</p><input id="ln" placeholder="Name" maxlength="24" value="${esc(S.name)}" style="width:100%;margin:6px 0"><input id="lp" type="password" placeholder="Password (optional)" style="width:100%;margin:6px 0">${nav}`,
   key:`<h1>Enter your product key</h1><p>A key sets your storage plan. Without one you’ll get ${DEFAULT_GB} GB. You can add one later in Settings.</p><input id="v" placeholder="XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX" value="${esc(S.key)}">${nav}<p style="margin-top:14px"><a href="#" id="sk">Skip for now</a></p>`,
-  done:`<div style="text-align:center"><h1>Hi, ${esc(S.email.split('@')[0])}</h1><p>We’re getting everything ready for you</p><div class="spin" style="margin:30px auto"></div></div>`
+  done:`<div style="text-align:center"><h1>Hi, ${esc(S.local?S.name:S.email.split('@')[0])}</h1><p>We’re getting everything ready for you</p><div class="spin" style="margin:30px auto"></div></div>`
  };
  L.innerHTML=`<div class="center"><div class="oobe">${pages[step]}</div></div>`;
  const on=(id,f)=>{const e=$(id,L);if(e)e.onclick=ev=>{ev.preventDefault();f()}};
@@ -2239,20 +2871,33 @@ function oobe(step,canBack){
   return;
  }
  if(step==='signin'){
+  on('#skipacc',()=>{S.local=true;oobe('local',canBack)});
   cloudAuth($('#cauth',L),({email,pw})=>{
    if(DB.users[email]){oobe.S=null;toast('That account is already on this PC. Sign in below.');return lockScreen(email)}
-   S.email=email;S.pw=pw;oobe('key',canBack);
+   S.local=false;S.email=email;S.pw=pw;oobe('key',canBack);
   },()=>oobe(0,canBack));
   return;
  }
+ if(step==='local'){
+  const ln=$('#ln',L);ln.focus();
+  on('#bk',()=>oobe('signin',canBack));
+  on('#nx',()=>{
+   const n=ln.value.trim();
+   if(!n)return toast('Enter a name.');
+   if(DB.users[n])return toast('That name is already on this PC.');
+   S.name=n;S.pw=$('#lp',L).value;oobe('key',canBack);
+  });
+  return;
+ }
  const v=$('#v',L);if(v)v.focus();
- on('#bk',()=>oobe('signin',canBack));
+ on('#bk',()=>oobe(S.local?'local':'signin',canBack));
  on('#sk',()=>{S.key='';oobe('done',canBack)});
  on('#nx',()=>{S.key=v.value.trim().toLowerCase();if(S.key&&!KEYS[S.key])return toast('That product key isn’t valid.');oobe('done',canBack)});
  if(step==='done')setTimeout(async()=>{
-  DB.users[S.email]={h:await sha(S.pw+S.email),blank:false,gb:KEYS[S.key]||DEFAULT_GB,wall:0,fs:starterFS(),cloud:{uid:CSES.uid,email:S.email,rt:CSES.rt,map:{}}};
-  me=S.email;ensureCloudRoot();
-  if(!save()){delete DB.users[S.email];me=null;return oobe('key',canBack)}
+  const id=S.local?S.name:S.email,rec={h:await sha(S.pw+id),blank:!S.pw,gb:KEYS[S.key]||DEFAULT_GB,wall:0,fs:starterFS()};
+  if(!S.local)rec.cloud={uid:CSES.uid,email:S.email,rt:CSES.rt,map:{}}; // no account: a plain local user
+  DB.users[id]=rec;me=id;ensureCloudRoot();
+  if(!save()){delete DB.users[id];me=null;return oobe('key',canBack)}
   oobe.S=null;boot();
  },2200);
 }
